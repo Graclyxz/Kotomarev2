@@ -66,8 +66,10 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
         disabled={disabled || isLoading}
         className={`
           inline-flex items-center justify-center gap-2
-          font-medium rounded-lg
-          disabled:opacity-50 disabled:cursor-not-allowed
+          font-medium rounded-lg cursor-pointer
+          transition-all duration-200 ease-out
+          hover:scale-105 active:scale-95
+          disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100
           ${sizeStyles[size]}
           ${fullWidth ? 'w-full' : ''}
           ${hoverClass[variant]}

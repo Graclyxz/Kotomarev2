@@ -11,3 +11,4 @@ export { SearchBar } from './SearchBar';
 export { Select } from './Select';
 export { ThemeToggle } from './ThemeToggle';
 export { ThemeSelector } from './ThemeSelector';
+export { SectionHeader } from './SectionHeader';
