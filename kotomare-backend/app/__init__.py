@@ -1,21 +1,34 @@
-from flask import Flask
-from flask_cors import CORS
-from dotenv import load_dotenv
 import os
+from flask import Flask
+from dotenv import load_dotenv
 
 load_dotenv()
 
-def create_app():
+
+def create_app(config_name: str = None):
+    """Factory de la aplicación Flask"""
+
+    if config_name is None:
+        config_name = os.getenv('FLASK_ENV', 'development')
+
     app = Flask(__name__)
 
-    # Configuración
-    app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'dev-secret-key')
+    # Cargar configuración
+    from app.config import config
+    app.config.from_object(config[config_name])
 
-    # Habilitar CORS para el frontend
-    CORS(app, origins=['http://localhost:3000'])
+    # Inicializar extensiones
+    from app.extensions import db, jwt, cors
+    db.init_app(app)
+    jwt.init_app(app)
+    cors.init_app(app, origins=['http://localhost:3000'])
 
     # Registrar rutas
-    from app.routes import main
-    app.register_blueprint(main.bp)
+    from app.routes import register_routes
+    register_routes(app)
+
+    # Crear tablas de la base de datos
+    with app.app_context():
+        db.create_all()
 
     return app
