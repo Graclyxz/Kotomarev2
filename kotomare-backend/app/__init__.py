@@ -21,7 +21,7 @@ def create_app(config_name: str = None):
     from app.extensions import db, jwt, cors
     db.init_app(app)
     jwt.init_app(app)
-    cors.init_app(app, origins=['http://localhost:3000'])
+    cors.init_app(app, origins=['http://localhost:3000', 'http://127.0.0.1:3000', 'http://localhost:3001'])
 
     # Registrar rutas
     from app.routes import register_routes

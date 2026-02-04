@@ -1,8 +1,9 @@
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from app.extensions import db
-from app.models import Anime, User
+from app.models import Anime, User, Episode, HomeSection, HomeSectionAnime
 from app.services.anime_service import AnimeService
+from app.scrapers import get_scraper
 
 bp = Blueprint('anime', __name__)
 
@@ -81,4 +82,96 @@ def get_episode_videos(slug, episode_number):
         'episode': episode_number,
         'source': source,
         'videos': videos
+    })
+
+
+@bp.route('/home/recent-episodes', methods=['GET'])
+def get_recent_episodes():
+    """Obtiene los episodios recientes desde la base de datos"""
+    limit = request.args.get('limit', 20, type=int)
+
+    # Obtener episodios recientes de la base de datos
+    episodes = Episode.query.order_by(Episode.created_at.desc()).limit(limit).all()
+
+    return jsonify({
+        'episodes': [ep.to_dict() for ep in episodes],
+        'count': len(episodes)
+    })
+
+
+@bp.route('/home/popular', methods=['GET'])
+def get_popular_animes():
+    """Obtiene los animes populares/en emisión desde la base de datos"""
+    limit = request.args.get('limit', 12, type=int)
+
+    # Obtener la sección 'popular'
+    section = HomeSection.query.filter_by(name='popular', is_active=True).first()
+
+    if not section:
+        return jsonify({'animes': [], 'count': 0})
+
+    # Obtener animes de la sección ordenados
+    section_animes = HomeSectionAnime.query.filter_by(section_id=section.id)\
+        .order_by(HomeSectionAnime.order)\
+        .limit(limit)\
+        .all()
+
+    animes = [sa.anime.to_dict() for sa in section_animes if sa.anime]
+
+    return jsonify({
+        'section': section.to_dict(),
+        'animes': animes,
+        'count': len(animes)
+    })
+
+
+@bp.route('/home/latest', methods=['GET'])
+def get_latest_animes():
+    """Obtiene los últimos animes añadidos desde la base de datos"""
+    limit = request.args.get('limit', 12, type=int)
+
+    # Obtener la sección 'latest'
+    section = HomeSection.query.filter_by(name='latest', is_active=True).first()
+
+    if not section:
+        return jsonify({'animes': [], 'count': 0})
+
+    # Obtener animes de la sección ordenados
+    section_animes = HomeSectionAnime.query.filter_by(section_id=section.id)\
+        .order_by(HomeSectionAnime.order)\
+        .limit(limit)\
+        .all()
+
+    animes = [sa.anime.to_dict() for sa in section_animes if sa.anime]
+
+    return jsonify({
+        'section': section.to_dict(),
+        'animes': animes,
+        'count': len(animes)
+    })
+
+
+@bp.route('/home/featured', methods=['GET'])
+def get_featured_animes():
+    """Obtiene los animes destacados para el carrusel"""
+    limit = request.args.get('limit', 5, type=int)
+
+    # Obtener la sección 'featured'
+    section = HomeSection.query.filter_by(name='featured', is_active=True).first()
+
+    if not section:
+        return jsonify({'animes': [], 'count': 0})
+
+    # Obtener animes de la sección ordenados
+    section_animes = HomeSectionAnime.query.filter_by(section_id=section.id)\
+        .order_by(HomeSectionAnime.order)\
+        .limit(limit)\
+        .all()
+
+    animes = [sa.anime.to_dict() for sa in section_animes if sa.anime]
+
+    return jsonify({
+        'section': section.to_dict(),
+        'animes': animes,
+        'count': len(animes)
     })
