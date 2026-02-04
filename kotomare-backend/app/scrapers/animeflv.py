@@ -1,6 +1,7 @@
 import re
 import json
 from typing import List, Dict, Optional
+from urllib.parse import urlencode
 from bs4 import BeautifulSoup
 from app.scrapers.base import BaseScraper
 
@@ -11,18 +12,167 @@ class AnimeFLVScraper(BaseScraper):
     name = "animeflv"
     base_url = "https://www3.animeflv.net"
 
-    def search(self, query: str) -> List[Dict]:
-        """Busca animes en AnimeFLV"""
-        url = f"{self.base_url}/browse?q={query}"
+    # Constantes de filtros disponibles
+    GENRES = {
+        'accion': 'Acción',
+        'artes-marciales': 'Artes Marciales',
+        'aventura': 'Aventura',
+        'carreras': 'Carreras',
+        'ciencia-ficcion': 'Ciencia Ficción',
+        'comedia': 'Comedia',
+        'demencia': 'Demencia',
+        'demonios': 'Demonios',
+        'deportes': 'Deportes',
+        'drama': 'Drama',
+        'ecchi': 'Ecchi',
+        'escolares': 'Escolares',
+        'espacial': 'Espacial',
+        'fantasia': 'Fantasía',
+        'harem': 'Harem',
+        'historico': 'Histórico',
+        'infantil': 'Infantil',
+        'josei': 'Josei',
+        'juegos': 'Juegos',
+        'magia': 'Magia',
+        'mecha': 'Mecha',
+        'militar': 'Militar',
+        'misterio': 'Misterio',
+        'musica': 'Música',
+        'parodia': 'Parodia',
+        'policia': 'Policía',
+        'psicologico': 'Psicológico',
+        'recuentos-de-la-vida': 'Recuentos de la vida',
+        'romance': 'Romance',
+        'samurai': 'Samurai',
+        'seinen': 'Seinen',
+        'shoujo': 'Shoujo',
+        'shounen': 'Shounen',
+        'sobrenatural': 'Sobrenatural',
+        'superpoderes': 'Superpoderes',
+        'suspenso': 'Suspenso',
+        'terror': 'Terror',
+        'vampiros': 'Vampiros',
+        'yaoi': 'Yaoi',
+        'yuri': 'Yuri',
+    }
+
+    TYPES = {
+        'tv': 'TV',
+        'movie': 'Película',
+        'special': 'Especial',
+        'ova': 'OVA',
+    }
+
+    STATUS = {
+        1: 'En emisión',
+        2: 'Finalizado',
+        3: 'Próximamente',
+    }
+
+    ORDER = {
+        'default': 'Por defecto',
+        'updated': 'Actualizado recientemente',
+        'added': 'Agregado recientemente',
+        'title': 'Título A-Z',
+        'rating': 'Calificación',
+    }
+
+    def browse(
+        self,
+        query: str = None,
+        genres: List[str] = None,
+        year: int = None,
+        types: List[str] = None,
+        status: List[int] = None,
+        order: str = 'default',
+        page: int = 1
+    ) -> Dict:
+        """
+        Navega el directorio de AnimeFLV con filtros.
+
+        Args:
+            query: Búsqueda por texto
+            genres: Lista de géneros (ej: ['accion', 'aventura'])
+            year: Año de emisión (ej: 2024)
+            types: Lista de tipos (ej: ['tv', 'movie'])
+            status: Lista de estados (1=emisión, 2=finalizado, 3=próximamente)
+            order: Orden ('default', 'updated', 'added', 'title', 'rating')
+            page: Número de página
+
+        Returns:
+            Dict con 'animes', 'page', 'has_next', 'total_pages'
+        """
+        # Construir parámetros de URL
+        params = []
+
+        if query:
+            params.append(('q', query))
+
+        if genres:
+            for genre in genres:
+                params.append(('genre[]', genre))
+
+        if year:
+            params.append(('year', str(year)))
+
+        if types:
+            for t in types:
+                params.append(('type[]', t))
+
+        if status:
+            for s in status:
+                params.append(('status[]', str(s)))
+
+        if order and order != 'default':
+            params.append(('order', order))
+
+        params.append(('page', str(page)))
+
+        # Construir URL
+        query_string = urlencode(params)
+        url = f"{self.base_url}/browse?{query_string}"
+
         html = self._make_request(url)
 
         if not html:
-            return []
+            return {'animes': [], 'page': page, 'has_next': False, 'total_pages': 0}
 
         soup = BeautifulSoup(html, 'html.parser')
+        animes = self._parse_anime_list(soup)
+
+        # Detectar paginación
+        pagination = soup.find('ul', class_='pagination')
+        has_next = False
+        total_pages = page
+
+        if pagination:
+            # Buscar el último número de página
+            page_links = pagination.find_all('a')
+            for link in page_links:
+                try:
+                    page_num = int(link.text.strip())
+                    if page_num > total_pages:
+                        total_pages = page_num
+                except ValueError:
+                    continue
+
+            # Ver si hay página siguiente
+            next_link = pagination.find('li', class_='active')
+            if next_link and next_link.find_next_sibling('li'):
+                has_next = True
+
+        return {
+            'animes': animes,
+            'page': page,
+            'has_next': has_next,
+            'total_pages': total_pages,
+            'count': len(animes)
+        }
+
+    def _parse_anime_list(self, soup: BeautifulSoup) -> List[Dict]:
+        """Parsea la lista de animes de una página de browse"""
         results = []
 
-        # Los resultados están en una lista con clase "ListAnimes"
         anime_list = soup.find('ul', class_='ListAnimes')
         if not anime_list:
             return []
@@ -59,13 +209,32 @@ class AnimeFLVScraper(BaseScraper):
                 rating_elem = article.find('span', class_='Vts')
                 rating = rating_elem.text.strip() if rating_elem else None
 
+                # Descripción corta
+                desc_elem = article.find('div', class_='Description')
+                description = ''
+                if desc_elem:
+                    desc_p = desc_elem.find('p')
+                    description = desc_p.text.strip() if desc_p else ''
+
+                # Seguidores
+                followers = None
+                followers_elem = article.find('span', class_='fa-users')
+                if followers_elem and followers_elem.parent:
+                    followers_text = followers_elem.parent.text.strip()
+                    try:
+                        followers = int(followers_text.replace(',', '').split()[0])
+                    except (ValueError, IndexError):
+                        pass
+
                 results.append({
                     'id': anime_id,
                     'title': title,
                     'url': f"{self.base_url}{href}",
                     'cover_image': cover_image,
                     'type': anime_type,
-                    'rating': rating
+                    'rating': rating,
+                    'description': description,
+                    'followers': followers
                 })
 
             except Exception as e:
@@ -73,6 +242,11 @@ class AnimeFLVScraper(BaseScraper):
                 continue
 
         return results
+
+    def search(self, query: str) -> List[Dict]:
+        """Busca animes en AnimeFLV"""
+        result = self.browse(query=query)
+        return result.get('animes', [])
 
     def get_anime_detail(self, anime_id: str) -> Optional[Dict]:
         """Obtiene el detalle de un anime"""
@@ -243,3 +417,144 @@ class AnimeFLVScraper(BaseScraper):
             print(f"Error obteniendo videos de {anime_id} ep {episode_number}: {e}")
 
         return sources
+
+    def get_recent_episodes(self, limit: int = 20) -> List[Dict]:
+        """Obtiene los episodios recientes desde la página principal"""
+        html = self._make_request(self.base_url)
+
+        if not html:
+            return []
+
+        soup = BeautifulSoup(html, 'html.parser')
+        episodes = []
+
+        try:
+            # Los episodios recientes están en ListEpisodios
+            episodes_list = soup.find('ul', class_='ListEpisodios')
+            if not episodes_list:
+                return []
+
+            for item in episodes_list.find_all('li')[:limit]:
+                try:
+                    link = item.find('a')
+                    if not link:
+                        continue
+
+                    href = link.get('href', '')
+
+                    # Imagen del episodio
+                    img_container = item.find('span', class_='Image')
+                    img = img_container.find('img') if img_container else None
+                    thumbnail = img.get('src', '') if img else ''
+                    if thumbnail and not thumbnail.startswith('http'):
+                        thumbnail = f"{self.base_url}{thumbnail}"
+
+                    # Información del episodio
+                    capi = item.find('span', class_='Capi')
+                    ep_text = capi.text.strip() if capi else ''
+                    ep_number = 0
+                    if 'Episodio' in ep_text:
+                        try:
+                            ep_number = int(ep_text.replace('Episodio', '').strip())
+                        except ValueError:
+                            pass
+
+                    # Título del anime
+                    title_elem = item.find('strong', class_='Title')
+                    anime_title = title_elem.text.strip() if title_elem else ''
+
+                    # Extraer anime_id del href (formato: /ver/anime-id-episodio)
+                    parts = href.split('/')[-1].rsplit('-', 1)
+                    anime_id = parts[0] if len(parts) > 1 else ''
+
+                    episodes.append({
+                        'id': f"{anime_id}-{ep_number}",
+                        'anime_id': anime_id,
+                        'anime_title': anime_title,
+                        'episode_number': ep_number,
+                        'thumbnail': thumbnail,
+                        'url': f"{self.base_url}{href}"
+                    })
+
+                except Exception as e:
+                    print(f"Error parseando episodio reciente: {e}")
+                    continue
+
+        except Exception as e:
+            print(f"Error obteniendo episodios recientes: {e}")
+
+        return episodes
+
+    def get_popular_animes(self, limit: int = 24, order: str = 'default') -> List[Dict]:
+        """
+        Obtiene los animes en emisión.
+
+        Args:
+            limit: Número máximo de animes
+            order: 'default' (actualizado), 'rating' (calificación)
+        """
+        result = self.browse(status=[1], order=order, page=1)
+        return result.get('animes', [])[:limit]
+
+    def get_latest_animes(self, page: int = 1, limit: int = 24) -> List[Dict]:
+        """Obtiene los últimos animes añadidos"""
+        result = self.browse(order='added', page=page)
+        return result.get('animes', [])[:limit]
+
+    def get_airing_animes(self, page: int = 1, order: str = 'default') -> Dict:
+        """Obtiene animes en emisión con paginación"""
+        return self.browse(status=[1], order=order, page=page)
+
+    def get_top_rated_airing(self, limit: int = 24) -> List[Dict]:
+        """Obtiene los animes en emisión mejor calificados"""
+        result = self.browse(status=[1], order='rating', page=1)
+        return result.get('animes', [])[:limit]
+
+    def get_finished_animes(self, page: int = 1) -> Dict:
+        """Obtiene animes finalizados con paginación"""
+        return self.browse(status=[2], order='rating', page=page)
+
+    def get_animes_by_genre(self, genre: str, page: int = 1) -> Dict:
+        """Obtiene animes por género"""
+        return self.browse(genres=[genre], order='rating', page=page)
+
+    def get_animes_by_year(self, year: int, page: int = 1) -> Dict:
+        """Obtiene animes por año"""
+        return self.browse(year=year, order='rating', page=page)
+
+    def get_top_rated(self, limit: int = 24) -> List[Dict]:
+        """Obtiene los animes mejor calificados"""
+        result = self.browse(order='rating', page=1)
+        return result.get('animes', [])[:limit]
+
+    def get_directory_page(self, page: int = 1) -> Dict:
+        """Obtiene una página del directorio completo"""
+        return self.browse(page=page)
+
+    def get_all_animes_generator(self, max_pages: int = None):
+        """
+        Generador que itera por todas las páginas del directorio.
+        Útil para sincronización masiva.
+
+        Args:
+            max_pages: Límite de páginas (None = todas)
+
+        Yields:
+            Dict con información de cada página
+        """
+        page = 1
+        while True:
+            result = self.browse(page=page)
+
+            if not result.get('animes'):
+                break
+
+            yield result
+
+            if not result.get('has_next'):
+                break
+
+            if max_pages and page >= max_pages:
+                break
+
+            page += 1
