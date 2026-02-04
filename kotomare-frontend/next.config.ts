@@ -6,12 +6,17 @@ const nextConfig: NextConfig = {
       {
         protocol: 'https',
         hostname: 'animeflv.net',
-        pathname: '/uploads/**',
+        pathname: '/**',
+      },
+      {
+        protocol: 'https',
+        hostname: 'www3.animeflv.net',
+        pathname: '/**',
       },
       {
         protocol: 'https',
         hostname: '*.animeflv.net',
-        pathname: '/uploads/**',
+        pathname: '/**',
       },
       {
         protocol: 'https',

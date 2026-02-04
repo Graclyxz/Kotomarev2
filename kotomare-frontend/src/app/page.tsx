@@ -1,115 +1,107 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { Navbar, Footer, Container } from '@/components/layout';
 import {
-  Button, Input, Badge, Card, CardContent, Tabs, TabsList, TabsTrigger, TabsContent,
-  Modal, Avatar, SearchBar, Skeleton, SkeletonCard, ThemeSelector
+  Button, Card, CardContent, Tabs, TabsList, TabsTrigger, TabsContent,
+  Modal, Skeleton, ThemeSelector
 } from '@/components/ui';
-import { AnimeCard, AnimeGrid, AnimeCarousel, VideoPlayer, EpisodeList, RecentEpisodes } from '@/components/anime';
-
-// Datos de ejemplo para el carrusel hero
-const mockCarouselItems = [
-  {
-    id: 1,
-    slug: 'frieren',
-    title: 'Sousou no Frieren',
-    coverImage: 'https://cdn.myanimelist.net/images/anime/1015/138006l.jpg',
-    bannerImage: 'https://s4.anilist.co/file/anilistcdn/media/anime/banner/154587-ivXNJ23SM1xB.jpg',
-    synopsis: 'La elfa maga Frieren y su grupo de héroes derrotaron al Rey Demonio después de un viaje de 10 años. Ahora vive sola, viajando y coleccionando hechizos.',
-    type: 'TV',
-    rating: '4.9',
-    genres: ['Aventura', 'Drama', 'Fantasía'],
-    year: 2024,
-    status: 'En emisión',
-  },
-  {
-    id: 2,
-    slug: 'one-piece',
-    title: 'One Piece',
-    coverImage: 'https://cdn.myanimelist.net/images/anime/1244/138851l.jpg',
-    bannerImage: 'https://s4.anilist.co/file/anilistcdn/media/anime/banner/21-wf37VakJmZqs.jpg',
-    synopsis: 'Sigue las aventuras de Monkey D. Luffy y su tripulación pirata en busca del tesoro más grande del mundo, el One Piece.',
-    type: 'TV',
-    rating: '4.8',
-    genres: ['Acción', 'Aventura', 'Comedia'],
-    year: 1999,
-    status: 'En emisión',
-  },
-  {
-    id: 3,
-    slug: 'jujutsu-kaisen',
-    title: 'Jujutsu Kaisen',
-    coverImage: 'https://cdn.myanimelist.net/images/anime/1171/109222l.jpg',
-    bannerImage: 'https://s4.anilist.co/file/anilistcdn/media/anime/banner/113415-jQBSkxWAAk83.jpg',
-    synopsis: 'Un estudiante de secundaria se une a una organización secreta de hechiceros para eliminar una poderosa maldición.',
-    type: 'TV',
-    rating: '4.7',
-    genres: ['Acción', 'Fantasía', 'Sobrenatural'],
-    year: 2023,
-    status: 'Finalizado',
-  },
-  {
-    id: 4,
-    slug: 'demon-slayer',
-    title: 'Kimetsu no Yaiba',
-    coverImage: 'https://cdn.myanimelist.net/images/anime/1286/99889l.jpg',
-    bannerImage: 'https://s4.anilist.co/file/anilistcdn/media/anime/banner/101922-YfZhKBUDDS6L.jpg',
-    synopsis: 'Tanjiro Kamado se convierte en un cazador de demonios para vengar a su familia y curar a su hermana Nezuko.',
-    type: 'TV',
-    rating: '4.8',
-    genres: ['Acción', 'Fantasía', 'Shounen'],
-    year: 2019,
-    status: 'Finalizado',
-  },
-];
-
-// Episodios recientes
-const mockRecentEpisodes = [
-  { id: '1', animeId: 1, animeSlug: 'darwin-jihen', animeTitle: 'Darwin Jihen', animeCover: 'https://cdn.myanimelist.net/images/anime/1935/143671l.jpg', episodeNumber: 5, type: 'TV', rating: '4.2' },
-  { id: '2', animeId: 2, animeSlug: 'yoroi-shin-den', animeTitle: 'Yoroi Shin Den Samurai Troopers', animeCover: 'https://cdn.myanimelist.net/images/anime/1223/143557l.jpg', episodeNumber: 5, type: 'OVA', rating: '3.8' },
-  { id: '3', animeId: 3, animeSlug: 'yuusha-party', animeTitle: 'Yuusha Party ni Kawaii Ko', animeCover: 'https://cdn.myanimelist.net/images/anime/1493/143204l.jpg', episodeNumber: 5, type: 'TV', rating: '4.0' },
-  { id: '4', animeId: 4, animeSlug: 'isekai-shachiku', animeTitle: 'Isekai no Sata wa Shachiku', animeCover: 'https://cdn.myanimelist.net/images/anime/1756/143536l.jpg', episodeNumber: 5, type: 'TV', rating: '3.9' },
-  { id: '5', animeId: 5, animeSlug: 'blue-lock', animeTitle: 'Blue Lock Season 2', animeCover: 'https://cdn.myanimelist.net/images/anime/1567/143694l.jpg', episodeNumber: 18, type: 'TV', rating: '4.5' },
-  { id: '6', animeId: 6, animeSlug: 'dandadan', animeTitle: 'Dandadan', animeCover: 'https://cdn.myanimelist.net/images/anime/1255/142091l.jpg', episodeNumber: 12, type: 'TV', rating: '4.7' },
-];
-
-// Animes populares
-const mockAnimes = [
-  { id: 1, slug: 'frieren', title: 'Sousou no Frieren', cover_image: 'https://cdn.myanimelist.net/images/anime/1015/138006l.jpg', type: 'TV', sources: { mal: { rating: '4.9' } } },
-  { id: 2, slug: 'one-piece', title: 'One Piece', cover_image: 'https://cdn.myanimelist.net/images/anime/1244/138851l.jpg', type: 'TV', sources: { mal: { rating: '4.8' } } },
-  { id: 3, slug: 'jujutsu-kaisen', title: 'Jujutsu Kaisen', cover_image: 'https://cdn.myanimelist.net/images/anime/1171/109222l.jpg', type: 'TV', sources: { mal: { rating: '4.7' } } },
-  { id: 4, slug: 'demon-slayer', title: 'Kimetsu no Yaiba', cover_image: 'https://cdn.myanimelist.net/images/anime/1286/99889l.jpg', type: 'TV', sources: { mal: { rating: '4.8' } } },
-  { id: 5, slug: 'solo-leveling', title: 'Solo Leveling', cover_image: 'https://cdn.myanimelist.net/images/anime/1139/142631l.jpg', type: 'TV', sources: { mal: { rating: '4.6' } } },
-  { id: 6, slug: 'blue-lock', title: 'Blue Lock', cover_image: 'https://cdn.myanimelist.net/images/anime/1567/143694l.jpg', type: 'TV', sources: { mal: { rating: '4.5' } } },
-];
-
-// Animes de temporada
-const mockSeasonAnimes = [
-  { id: 7, slug: 'dandadan', title: 'Dandadan', cover_image: 'https://cdn.myanimelist.net/images/anime/1255/142091l.jpg', type: 'TV', sources: { mal: { rating: '4.7' } } },
-  { id: 8, slug: 'oshi-no-ko-2', title: 'Oshi no Ko Season 2', cover_image: 'https://cdn.myanimelist.net/images/anime/1764/141930l.jpg', type: 'TV', sources: { mal: { rating: '4.6' } } },
-  { id: 9, slug: 're-zero-3', title: 'Re:Zero Season 3', cover_image: 'https://cdn.myanimelist.net/images/anime/1400/142635l.jpg', type: 'TV', sources: { mal: { rating: '4.5' } } },
-  { id: 10, slug: 'mha-7', title: 'Boku no Hero Academia S7', cover_image: 'https://cdn.myanimelist.net/images/anime/1389/142269l.jpg', type: 'TV', sources: { mal: { rating: '4.4' } } },
-  { id: 11, slug: 'bleach-tybw', title: 'Bleach: TYBW', cover_image: 'https://cdn.myanimelist.net/images/anime/1908/135431l.jpg', type: 'TV', sources: { mal: { rating: '4.8' } } },
-  { id: 12, slug: 'chainsaw-man', title: 'Chainsaw Man', cover_image: 'https://cdn.myanimelist.net/images/anime/1806/126216l.jpg', type: 'TV', sources: { mal: { rating: '4.6' } } },
-];
-
-const mockEpisodes = Array.from({ length: 24 }, (_, i) => ({
-  id: String(i + 1),
-  number: i + 1,
-  url: `https://example.com/episode/${i + 1}`,
-}));
-
-const mockServers = [
-  { server: 'StreamWish', url: 'https://streamwish.to/e/example', type: 'SUB', ads: 0 },
-  { server: 'MEGA', url: 'https://mega.nz/embed/example', type: 'SUB', ads: 0 },
-  { server: 'Stape', url: 'https://streamtape.com/e/example', type: 'SUB', ads: 1 },
-];
+import { AnimeGrid, AnimeCarousel, RecentEpisodes } from '@/components/anime';
+import {
+  useFeaturedAnimes,
+  useRecentEpisodes,
+  usePopularAnimes,
+  useLatestAnimes,
+  useAdminSync
+} from '@/hooks/useAnime';
 
 export default function HomePage() {
-  const [modalOpen, setModalOpen] = useState(false);
   const [themeModalOpen, setThemeModalOpen] = useState(false);
-  const [selectedEpisode, setSelectedEpisode] = useState(1);
+  const [syncModalOpen, setSyncModalOpen] = useState(false);
+
+  // Fetch data from database
+  const { animes: featuredAnimes, isLoading: loadingFeatured, refetch: refetchFeatured } = useFeaturedAnimes(5);
+  const { episodes: recentEpisodesData, isLoading: loadingEpisodes, error: episodesError, refetch: refetchEpisodes } = useRecentEpisodes(10);
+  const { animes: popularAnimesData, isLoading: loadingPopular, error: popularError, refetch: refetchPopular } = usePopularAnimes(12);
+  const { animes: latestAnimesData, isLoading: loadingLatest, error: latestError, refetch: refetchLatest } = useLatestAnimes(12);
+
+  // Admin sync
+  const { syncAll, isSyncing, lastResult } = useAdminSync();
+
+  // Handle sync button
+  const handleSync = useCallback(async () => {
+    const result = await syncAll();
+    if (result?.success) {
+      // Refetch all data after sync
+      refetchFeatured();
+      refetchEpisodes();
+      refetchPopular();
+      refetchLatest();
+    }
+  }, [syncAll, refetchFeatured, refetchEpisodes, refetchPopular, refetchLatest]);
+
+  // Transform recent episodes data for RecentEpisodes component
+  const recentEpisodes = useMemo(() => {
+    return recentEpisodesData.map((ep) => ({
+      id: String(ep.id),
+      animeId: ep.anime_id,
+      animeSlug: ep.anime_slug,
+      animeTitle: ep.anime_title,
+      animeCover: ep.anime_cover || ep.thumbnail || '',
+      episodeNumber: ep.number,
+      thumbnail: ep.thumbnail,
+      type: 'TV',
+    }));
+  }, [recentEpisodesData]);
+
+  // Transform animes data for AnimeGrid component
+  const popularAnimes = useMemo(() => {
+    return popularAnimesData.map((anime) => ({
+      id: anime.id,
+      slug: anime.slug,
+      title: anime.title,
+      cover_image: anime.cover_image || '',
+      type: anime.type,
+      status: anime.status,
+      sources: anime.sources,
+    }));
+  }, [popularAnimesData]);
+
+  const latestAnimes = useMemo(() => {
+    return latestAnimesData.map((anime) => ({
+      id: anime.id,
+      slug: anime.slug,
+      title: anime.title,
+      cover_image: anime.cover_image || '',
+      type: anime.type,
+      status: anime.status,
+      sources: anime.sources,
+    }));
+  }, [latestAnimesData]);
+
+  // Create carousel items from featured animes
+  const carouselItems = useMemo(() => {
+    if (featuredAnimes.length === 0) return [];
+    return featuredAnimes.map((anime) => ({
+      id: anime.id,
+      slug: anime.slug,
+      title: anime.title,
+      coverImage: anime.cover_image || '',
+      bannerImage: anime.banner_image || anime.cover_image || '',
+      synopsis: anime.synopsis,
+      type: anime.type,
+      status: anime.status,
+      genres: anime.genres,
+      rating: anime.sources?.animeflv?.rating,
+    }));
+  }, [featuredAnimes]);
+
+  // Check if database is empty (no data synced yet)
+  const isDatabaseEmpty = !loadingFeatured && !loadingPopular && !loadingLatest &&
+    featuredAnimes.length === 0 && popularAnimesData.length === 0 && latestAnimesData.length === 0;
+
+  // Show loading state for carousel
+  const isCarouselLoading = loadingFeatured && carouselItems.length === 0;
 
   return (
     <div className="min-h-screen flex flex-col" style={{ backgroundColor: 'var(--background)' }}>
@@ -119,37 +111,151 @@ export default function HomePage() {
       />
 
       <main className="flex-1 pt-16">
+        {/* Admin Sync Button - Visible for now */}
+        <Container className="py-4">
+          <div className="flex items-center justify-between p-4 rounded-xl" style={{ backgroundColor: 'var(--background-secondary)' }}>
+            <div>
+              <h3 className="font-semibold" style={{ color: 'var(--foreground)' }}>
+                Panel de Administración
+              </h3>
+              <p className="text-sm" style={{ color: 'var(--foreground-secondary)' }}>
+                {isDatabaseEmpty
+                  ? 'La base de datos está vacía. Sincroniza para cargar animes desde AnimeFLV.'
+                  : 'Sincroniza para actualizar el contenido desde AnimeFLV.'}
+              </p>
+            </div>
+            <div className="flex items-center gap-3">
+              <Button
+                variant="ghost"
+                onClick={() => setSyncModalOpen(true)}
+              >
+                Ver detalles
+              </Button>
+              <Button
+                onClick={handleSync}
+                isLoading={isSyncing}
+                disabled={isSyncing}
+              >
+                <svg className="w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                {isSyncing ? 'Sincronizando...' : 'Sincronizar Todo'}
+              </Button>
+            </div>
+          </div>
+        </Container>
+
+        {/* Empty State */}
+        {isDatabaseEmpty && !isSyncing && (
+          <Container className="py-16">
+            <div className="text-center">
+              <svg
+                className="w-24 h-24 mx-auto mb-6"
+                style={{ color: 'var(--foreground-muted)' }}
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+              </svg>
+              <h2 className="text-2xl font-bold mb-2" style={{ color: 'var(--foreground)' }}>
+                Base de datos vacía
+              </h2>
+              <p className="mb-6" style={{ color: 'var(--foreground-secondary)' }}>
+                Presiona el botón &quot;Sincronizar Todo&quot; para cargar animes desde AnimeFLV.
+              </p>
+              <Button onClick={handleSync} size="lg">
+                <svg className="w-5 h-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                Sincronizar Ahora
+              </Button>
+            </div>
+          </Container>
+        )}
+
         {/* Hero Carousel - Full width, no padding */}
-        <AnimeCarousel items={mockCarouselItems} />
+        {!isDatabaseEmpty && (
+          <>
+            {!isCarouselLoading && carouselItems.length > 0 && (
+              <AnimeCarousel items={carouselItems} />
+            )}
+            {isCarouselLoading && (
+              <div className="h-[500px] md:h-[550px] lg:h-[600px] flex items-center justify-center" style={{ backgroundColor: 'var(--background-secondary)' }}>
+                <div className="text-center">
+                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 mx-auto mb-4" style={{ borderColor: 'var(--primary)' }}></div>
+                  <p style={{ color: 'var(--foreground-secondary)' }}>Cargando animes...</p>
+                </div>
+              </div>
+            )}
 
-        {/* Recent Episodes Section */}
-        <Container className="py-8">
-          <RecentEpisodes
-            episodes={mockRecentEpisodes}
-            title="Episodios recientes"
-            subtitle="Últimos capítulos agregados a nuestro catálogo"
-          />
-        </Container>
+            {/* Recent Episodes Section */}
+            <Container className="py-8">
+              {episodesError ? (
+                <div className="text-center py-8">
+                  <p style={{ color: 'var(--error)' }}>Error al cargar episodios: {episodesError}</p>
+                </div>
+              ) : loadingEpisodes ? (
+                <div>
+                  <div className="mb-6">
+                    <Skeleton className="h-8 w-48 mb-2" />
+                    <Skeleton className="h-4 w-72" />
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-5 gap-4 md:gap-5">
+                    {Array.from({ length: 10 }).map((_, i) => (
+                      <div key={i}>
+                        <Skeleton className="aspect-[16/10] rounded-xl mb-1" />
+                        <Skeleton className="h-4 w-full" />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : recentEpisodes.length > 0 ? (
+                <RecentEpisodes
+                  episodes={recentEpisodes}
+                  title="Episodios recientes"
+                  subtitle="Últimos capítulos de AnimeFLV"
+                />
+              ) : null}
+            </Container>
 
-        {/* Popular Anime Section */}
-        <Container className="py-8">
-          <AnimeGrid
-            animes={mockAnimes}
-            title="Animes Populares"
-            subtitle="Los más vistos por nuestra comunidad"
-            viewAllLink="/browse?sort=popular"
-          />
-        </Container>
+            {/* Popular Anime Section - Animes en emisión */}
+            <Container className="py-8">
+              {popularError ? (
+                <div className="text-center py-8">
+                  <p style={{ color: 'var(--error)' }}>Error al cargar animes populares: {popularError}</p>
+                </div>
+              ) : (
+                <AnimeGrid
+                  animes={popularAnimes}
+                  isLoading={loadingPopular}
+                  skeletonCount={12}
+                  title="En Emisión"
+                  subtitle="Animes que se están emitiendo actualmente"
+                  viewAllLink="/browse?status=airing"
+                />
+              )}
+            </Container>
 
-        {/* Season Anime Section */}
-        <Container className="py-8">
-          <AnimeGrid
-            animes={mockSeasonAnimes}
-            title="Temporada Actual"
-            subtitle="Animes de la temporada en emisión"
-            viewAllLink="/browse?season=current"
-          />
-        </Container>
+            {/* Latest Anime Section */}
+            <Container className="py-8">
+              {latestError ? (
+                <div className="text-center py-8">
+                  <p style={{ color: 'var(--error)' }}>Error al cargar últimos animes: {latestError}</p>
+                </div>
+              ) : (
+                <AnimeGrid
+                  animes={latestAnimes}
+                  isLoading={loadingLatest}
+                  skeletonCount={12}
+                  title="Últimos Agregados"
+                  subtitle="Animes recientemente añadidos al catálogo"
+                  viewAllLink="/browse?order=added"
+                />
+              )}
+            </Container>
+          </>
+        )}
 
         {/* Theme Selector Section */}
         <Container className="py-8">
@@ -176,188 +282,69 @@ export default function HomePage() {
                 Usa el botón del sol/luna en el header para cambiar rápidamente entre modo claro y oscuro.
                 Para más opciones de personalización, abre el selector de temas.
               </p>
-              <div className="flex flex-wrap gap-4">
-                <div className="p-4 rounded-lg" style={{ backgroundColor: 'var(--primary)', color: 'var(--primary-foreground)' }}>
-                  Primary
-                </div>
-                <div className="p-4 rounded-lg" style={{ backgroundColor: 'var(--secondary)', color: 'var(--secondary-foreground)' }}>
-                  Secondary
-                </div>
-                <div className="p-4 rounded-lg" style={{ backgroundColor: 'var(--background-secondary)', color: 'var(--foreground)', border: '1px solid var(--border)' }}>
-                  Background
-                </div>
-                <div className="p-4 rounded-lg" style={{ backgroundColor: 'var(--success)', color: '#fff' }}>
-                  Success
-                </div>
-                <div className="p-4 rounded-lg" style={{ backgroundColor: 'var(--error)', color: '#fff' }}>
-                  Error
-                </div>
-              </div>
             </CardContent>
           </Card>
-        </Container>
-
-        {/* UI Components Demo */}
-        <Container className="py-8">
-          <div className="mb-6">
-            <h2 className="text-2xl font-bold mb-1" style={{ color: 'var(--primary)' }}>Componentes UI</h2>
-            <p className="text-sm" style={{ color: 'var(--foreground-secondary)' }}>Demostración de todos los componentes</p>
-          </div>
-
-          <Tabs defaultValue="buttons" className="mb-8">
-            <TabsList>
-              <TabsTrigger value="buttons">Botones</TabsTrigger>
-              <TabsTrigger value="inputs">Inputs</TabsTrigger>
-              <TabsTrigger value="cards">Cards</TabsTrigger>
-              <TabsTrigger value="misc">Otros</TabsTrigger>
-            </TabsList>
-
-            <TabsContent value="buttons">
-              <Card>
-                <CardContent className="space-y-4">
-                  <div className="flex flex-wrap gap-4">
-                    <Button variant="primary">Primary</Button>
-                    <Button variant="secondary">Secondary</Button>
-                    <Button variant="ghost">Ghost</Button>
-                    <Button variant="danger">Danger</Button>
-                  </div>
-                  <div className="flex flex-wrap gap-4">
-                    <Button size="sm">Small</Button>
-                    <Button size="md">Medium</Button>
-                    <Button size="lg">Large</Button>
-                  </div>
-                  <div className="flex flex-wrap gap-4">
-                    <Button isLoading>Loading</Button>
-                    <Button disabled>Disabled</Button>
-                  </div>
-                </CardContent>
-              </Card>
-            </TabsContent>
-
-            <TabsContent value="inputs">
-              <Card>
-                <CardContent className="space-y-4 max-w-md">
-                  <Input label="Email" placeholder="tu@email.com" />
-                  <Input label="Con error" placeholder="..." error="Este campo es requerido" />
-                  <SearchBar onSearch={(q) => console.log('Search:', q)} />
-                </CardContent>
-              </Card>
-            </TabsContent>
-
-            <TabsContent value="cards">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <Card hover onClick={() => console.log('clicked')}>
-                  <CardContent>
-                    <h3 className="text-lg font-semibold mb-2" style={{ color: 'var(--foreground)' }}>Card Clickeable</h3>
-                    <p className="text-sm" style={{ color: 'var(--foreground-secondary)' }}>Esta card tiene efecto hover y es clickeable.</p>
-                  </CardContent>
-                </Card>
-                <Card>
-                  <CardContent>
-                    <h3 className="text-lg font-semibold mb-2" style={{ color: 'var(--foreground)' }}>Card Normal</h3>
-                    <p className="text-sm" style={{ color: 'var(--foreground-secondary)' }}>Una card simple sin efectos especiales.</p>
-                  </CardContent>
-                </Card>
-                <Card>
-                  <CardContent className="flex flex-col items-center">
-                    <SkeletonCard />
-                  </CardContent>
-                </Card>
-              </div>
-            </TabsContent>
-
-            <TabsContent value="misc">
-              <Card>
-                <CardContent className="space-y-6">
-                  <div>
-                    <h4 className="text-sm font-medium mb-3" style={{ color: 'var(--foreground-muted)' }}>Badges</h4>
-                    <div className="flex flex-wrap gap-2">
-                      <Badge>Default</Badge>
-                      <Badge variant="success">Success</Badge>
-                      <Badge variant="warning">Warning</Badge>
-                      <Badge variant="error">Error</Badge>
-                      <Badge variant="info">Info</Badge>
-                    </div>
-                  </div>
-                  <div>
-                    <h4 className="text-sm font-medium mb-3" style={{ color: 'var(--foreground-muted)' }}>Avatars</h4>
-                    <div className="flex items-center gap-4">
-                      <Avatar size="sm" fallback="AB" />
-                      <Avatar size="md" fallback="CD" />
-                      <Avatar size="lg" fallback="EF" />
-                      <Avatar size="xl" fallback="GH" />
-                    </div>
-                  </div>
-                  <div>
-                    <h4 className="text-sm font-medium mb-3" style={{ color: 'var(--foreground-muted)' }}>Modal</h4>
-                    <Button onClick={() => setModalOpen(true)}>Abrir Modal</Button>
-                  </div>
-                  <div>
-                    <h4 className="text-sm font-medium mb-3" style={{ color: 'var(--foreground-muted)' }}>Skeleton</h4>
-                    <div className="space-y-2 max-w-md">
-                      <Skeleton className="h-4 w-full" />
-                      <Skeleton className="h-4 w-3/4" />
-                      <Skeleton className="h-4 w-1/2" />
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </TabsContent>
-          </Tabs>
-        </Container>
-
-        {/* Video Player Demo */}
-        <Container className="py-8">
-          <div className="mb-6">
-            <h2 className="text-2xl font-bold mb-1" style={{ color: 'var(--primary)' }}>Video Player</h2>
-            <p className="text-sm" style={{ color: 'var(--foreground-secondary)' }}>Reproductor con selector de servidores</p>
-          </div>
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <div className="lg:col-span-2">
-              <VideoPlayer
-                servers={mockServers}
-                title="One Piece"
-                episodeNumber={selectedEpisode}
-              />
-            </div>
-            <div>
-              <EpisodeList
-                episodes={mockEpisodes}
-                currentEpisode={selectedEpisode}
-                onSelectEpisode={(ep) => setSelectedEpisode(ep.number)}
-              />
-            </div>
-          </div>
-        </Container>
-
-        {/* Loading State Demo */}
-        <Container className="py-8">
-          <AnimeGrid
-            animes={[]}
-            isLoading
-            skeletonCount={6}
-            title="Estado de Carga"
-            subtitle="Así se ve mientras carga el contenido"
-          />
         </Container>
       </main>
 
       <Footer />
 
-      {/* Modal */}
-      <Modal isOpen={modalOpen} onClose={() => setModalOpen(false)} title="Modal de Ejemplo">
-        <p className="mb-4" style={{ color: 'var(--foreground-secondary)' }}>
-          Este es un modal de ejemplo. Puedes cerrarlo con Escape o haciendo click fuera.
-        </p>
-        <div className="flex justify-end gap-3">
-          <Button variant="ghost" onClick={() => setModalOpen(false)}>Cancelar</Button>
-          <Button onClick={() => setModalOpen(false)}>Confirmar</Button>
-        </div>
-      </Modal>
-
       {/* Theme Selector Modal */}
       <Modal isOpen={themeModalOpen} onClose={() => setThemeModalOpen(false)} title="Selector de Temas" size="lg">
         <ThemeSelector onClose={() => setThemeModalOpen(false)} />
+      </Modal>
+
+      {/* Sync Details Modal */}
+      <Modal isOpen={syncModalOpen} onClose={() => setSyncModalOpen(false)} title="Detalles de Sincronización" size="md">
+        <div className="space-y-4">
+          {lastResult ? (
+            <>
+              <div className="flex items-center gap-2 mb-4">
+                {lastResult.success ? (
+                  <>
+                    <svg className="w-6 h-6 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                    <span className="font-semibold text-green-500">Sincronización exitosa</span>
+                  </>
+                ) : (
+                  <>
+                    <svg className="w-6 h-6 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                    <span className="font-semibold text-red-500">Error en sincronización</span>
+                  </>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <h4 className="font-medium" style={{ color: 'var(--foreground)' }}>Resultados:</h4>
+                {Object.entries(lastResult.results).map(([key, value]) => (
+                  <div key={key} className="p-3 rounded-lg" style={{ backgroundColor: 'var(--background-secondary)' }}>
+                    <span className="font-medium capitalize">{key.replace('_', ' ')}: </span>
+                    {value.success ? (
+                      <span style={{ color: 'var(--success)' }}>
+                        {value.created || 0} creados, {value.updated || 0} actualizados
+                      </span>
+                    ) : (
+                      <span style={{ color: 'var(--error)' }}>{value.error}</span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </>
+          ) : (
+            <p style={{ color: 'var(--foreground-secondary)' }}>
+              No hay resultados de sincronización aún. Presiona &quot;Sincronizar Todo&quot; para comenzar.
+            </p>
+          )}
+
+          <div className="flex justify-end pt-4">
+            <Button variant="ghost" onClick={() => setSyncModalOpen(false)}>
+              Cerrar
+            </Button>
+          </div>
+        </div>
       </Modal>
     </div>
   );
