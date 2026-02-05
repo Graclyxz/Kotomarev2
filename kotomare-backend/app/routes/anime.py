@@ -1,177 +1,212 @@
+"""
+Rutas para animes guardados en la BD local.
+Solo muestra animes que han sido vinculados con fuentes de streaming.
+Para navegar el catálogo completo, usar las rutas de AniList (/api/anilist).
+"""
+
 from flask import Blueprint, request, jsonify
-from flask_jwt_extended import jwt_required, get_jwt_identity
-from app.extensions import db
-from app.models import Anime, User, Episode, HomeSection, HomeSectionAnime
-from app.services.anime_service import AnimeService
-from app.scrapers import get_scraper
+from app.models import Anime
 
 bp = Blueprint('anime', __name__)
 
 
-@bp.route('/search', methods=['GET'])
-@jwt_required(optional=True)
-def search():
-    """Busca animes por nombre"""
-    query = request.args.get('q', '').strip()
+# ============== ANIMES LOCALES ==============
 
-    if not query or len(query) < 3:
-        return jsonify({'error': 'La búsqueda debe tener al menos 3 caracteres'}), 400
+@bp.route('/saved', methods=['GET'])
+def get_saved_animes():
+    """
+    Obtiene todos los animes guardados en la BD.
+    Estos son animes que ya tienen fuentes de streaming vinculadas.
 
-    # Obtener fuentes activas del usuario (o usar todas por defecto)
-    user_id = get_jwt_identity()
-    sources = None
+    Query params:
+        page: Página (default: 1)
+        per_page: Resultados por página (default: 24, max: 48)
+        search: Búsqueda por título (opcional)
+    """
+    page = request.args.get('page', 1, type=int)
+    per_page = min(request.args.get('per_page', 24, type=int), 48)
+    search = request.args.get('search', '').strip()
 
-    if user_id:
-        user = User.query.get(user_id)
-        if user and user.settings:
-            sources = user.settings.get('sources')
+    query = Anime.query
 
-    results = AnimeService.search(query, sources=sources)
+    if search:
+        query = query.filter(Anime.title.ilike(f'%{search}%'))
+
+    # Ordenar por actualización más reciente
+    query = query.order_by(Anime.updated_at.desc())
+
+    pagination = query.paginate(page=page, per_page=per_page, error_out=False)
 
     return jsonify({
-        'query': query,
-        'results': results,
-        'count': len(results)
+        'animes': [a.to_dict() for a in pagination.items],
+        'count': len(pagination.items),
+        'page': page,
+        'total_pages': pagination.pages,
+        'total': pagination.total,
+        'has_next': pagination.has_next,
+        'has_prev': pagination.has_prev
     })
 
 
-@bp.route('/<slug>', methods=['GET'])
-def get_anime(slug):
-    """Obtiene el detalle de un anime por su slug"""
+@bp.route('/<int:anilist_id>', methods=['GET'])
+def get_anime_by_anilist_id(anilist_id):
+    """
+    Obtiene un anime de la BD por su ID de AniList.
+
+    Args:
+        anilist_id: ID del anime en AniList
+    """
+    anime = Anime.query.filter_by(anilist_id=anilist_id).first()
+
+    if not anime:
+        return jsonify({
+            'error': 'Anime no encontrado en la BD local',
+            'message': 'El anime no ha sido vinculado con ninguna fuente de streaming',
+            'hint': 'Usa /api/anilist/anime/{anilist_id} para obtener datos de AniList'
+        }), 404
+
+    return jsonify({
+        'anime': anime.to_dict(),
+        'source': 'local'
+    })
+
+
+@bp.route('/slug/<slug>', methods=['GET'])
+def get_anime_by_slug(slug):
+    """
+    Obtiene un anime de la BD por su slug.
+
+    Args:
+        slug: Slug del anime (ej: shingeki-no-kyojin)
+    """
     anime = Anime.query.filter_by(slug=slug).first()
 
     if not anime:
-        return jsonify({'error': 'Anime no encontrado'}), 404
+        return jsonify({
+            'error': 'Anime no encontrado en la BD local'
+        }), 404
 
-    return jsonify({'anime': anime.to_dict()})
+    return jsonify({
+        'anime': anime.to_dict(),
+        'source': 'local'
+    })
 
 
-@bp.route('/<slug>/episodes', methods=['GET'])
-def get_episodes(slug):
-    """Obtiene los episodios de un anime"""
-    source = request.args.get('source', 'animeflv')
+@bp.route('/<int:anilist_id>/sources', methods=['GET'])
+def get_anime_sources(anilist_id):
+    """
+    Obtiene las fuentes de streaming de un anime.
 
-    anime = Anime.query.filter_by(slug=slug).first()
+    Args:
+        anilist_id: ID del anime en AniList
+    """
+    anime = Anime.query.filter_by(anilist_id=anilist_id).first()
 
     if not anime:
-        return jsonify({'error': 'Anime no encontrado'}), 404
+        return jsonify({'error': 'Anime no encontrado en la BD'}), 404
 
-    episodes = AnimeService.get_episodes(anime, source=source)
+    if not anime.streaming_sources:
+        return jsonify({
+            'sources': [],
+            'message': 'No hay fuentes vinculadas'
+        })
+
+    sources_detail = []
+    for name, data in anime.streaming_sources.items():
+        sources_detail.append({
+            'name': name,
+            'id': data.get('id'),
+            'url': data.get('url'),
+            'episodes_count': data.get('episodes_count', 0),
+            'linked_at': data.get('linked_at')
+        })
 
     return jsonify({
         'anime_id': anime.id,
-        'source': source,
-        'episodes': episodes
+        'anilist_id': anilist_id,
+        'sources': sources_detail,
+        'count': len(sources_detail)
     })
 
 
-@bp.route('/<slug>/episode/<int:episode_number>', methods=['GET'])
-def get_episode_videos(slug, episode_number):
-    """Obtiene los videos de un episodio específico"""
-    source = request.args.get('source', 'animeflv')
+@bp.route('/<int:anilist_id>/episodes/<source>', methods=['GET'])
+def get_anime_episodes(anilist_id, source):
+    """
+    Obtiene los episodios de un anime de una fuente específica.
 
-    anime = Anime.query.filter_by(slug=slug).first()
+    Args:
+        anilist_id: ID del anime en AniList
+        source: Nombre de la fuente (ej: animeflv)
+    """
+    anime = Anime.query.filter_by(anilist_id=anilist_id).first()
 
     if not anime:
-        return jsonify({'error': 'Anime no encontrado'}), 404
+        return jsonify({'error': 'Anime no encontrado en la BD'}), 404
 
-    videos = AnimeService.get_episode_videos(anime, episode_number, source=source)
+    source_data = anime.get_streaming_source(source)
+
+    if not source_data:
+        return jsonify({'error': f'Fuente {source} no encontrada para este anime'}), 404
 
     return jsonify({
         'anime_id': anime.id,
-        'episode': episode_number,
+        'anilist_id': anilist_id,
         'source': source,
-        'videos': videos
+        'source_id': source_data.get('id'),
+        'episodes': source_data.get('episodes', []),
+        'episodes_count': source_data.get('episodes_count', 0)
     })
 
 
-@bp.route('/home/recent-episodes', methods=['GET'])
-def get_recent_episodes():
-    """Obtiene los episodios recientes desde la base de datos"""
-    limit = request.args.get('limit', 20, type=int)
+# ============== ESTADÍSTICAS ==============
 
-    # Obtener episodios recientes de la base de datos
-    episodes = Episode.query.order_by(Episode.created_at.desc()).limit(limit).all()
+@bp.route('/stats', methods=['GET'])
+def get_stats():
+    """
+    Obtiene estadísticas de la BD local.
+    """
+    total_animes = Anime.query.count()
+
+    # Contar por fuente de streaming
+    sources_count = {}
+    animes_with_sources = Anime.query.filter(Anime.streaming_sources != None).all()
+
+    for anime in animes_with_sources:
+        if anime.streaming_sources:
+            for source in anime.streaming_sources.keys():
+                sources_count[source] = sources_count.get(source, 0) + 1
 
     return jsonify({
-        'episodes': [ep.to_dict() for ep in episodes],
-        'count': len(episodes)
+        'total_animes': total_animes,
+        'animes_with_streaming': len(animes_with_sources),
+        'sources_breakdown': sources_count
     })
 
 
-@bp.route('/home/popular', methods=['GET'])
-def get_popular_animes():
-    """Obtiene los animes populares/en emisión desde la base de datos"""
-    limit = request.args.get('limit', 12, type=int)
+# ============== CHECK ==============
 
-    # Obtener la sección 'popular'
-    section = HomeSection.query.filter_by(name='popular', is_active=True).first()
+@bp.route('/check/<int:anilist_id>', methods=['GET'])
+def check_anime(anilist_id):
+    """
+    Verifica si un anime está en la BD y qué fuentes tiene.
+    Útil para el frontend para saber si mostrar botón de vincular
+    o si ya tiene episodios disponibles.
 
-    if not section:
-        return jsonify({'animes': [], 'count': 0})
+    Args:
+        anilist_id: ID del anime en AniList
+    """
+    anime = Anime.query.filter_by(anilist_id=anilist_id).first()
 
-    # Obtener animes de la sección ordenados
-    section_animes = HomeSectionAnime.query.filter_by(section_id=section.id)\
-        .order_by(HomeSectionAnime.order)\
-        .limit(limit)\
-        .all()
-
-    animes = [sa.anime.to_dict() for sa in section_animes if sa.anime]
-
-    return jsonify({
-        'section': section.to_dict(),
-        'animes': animes,
-        'count': len(animes)
-    })
-
-
-@bp.route('/home/latest', methods=['GET'])
-def get_latest_animes():
-    """Obtiene los últimos animes añadidos desde la base de datos"""
-    limit = request.args.get('limit', 12, type=int)
-
-    # Obtener la sección 'latest'
-    section = HomeSection.query.filter_by(name='latest', is_active=True).first()
-
-    if not section:
-        return jsonify({'animes': [], 'count': 0})
-
-    # Obtener animes de la sección ordenados
-    section_animes = HomeSectionAnime.query.filter_by(section_id=section.id)\
-        .order_by(HomeSectionAnime.order)\
-        .limit(limit)\
-        .all()
-
-    animes = [sa.anime.to_dict() for sa in section_animes if sa.anime]
+    if not anime:
+        return jsonify({
+            'exists': False,
+            'has_streaming': False,
+            'sources': []
+        })
 
     return jsonify({
-        'section': section.to_dict(),
-        'animes': animes,
-        'count': len(animes)
-    })
-
-
-@bp.route('/home/featured', methods=['GET'])
-def get_featured_animes():
-    """Obtiene los animes destacados para el carrusel"""
-    limit = request.args.get('limit', 5, type=int)
-
-    # Obtener la sección 'featured'
-    section = HomeSection.query.filter_by(name='featured', is_active=True).first()
-
-    if not section:
-        return jsonify({'animes': [], 'count': 0})
-
-    # Obtener animes de la sección ordenados
-    section_animes = HomeSectionAnime.query.filter_by(section_id=section.id)\
-        .order_by(HomeSectionAnime.order)\
-        .limit(limit)\
-        .all()
-
-    animes = [sa.anime.to_dict() for sa in section_animes if sa.anime]
-
-    return jsonify({
-        'section': section.to_dict(),
-        'animes': animes,
-        'count': len(animes)
+        'exists': True,
+        'has_streaming': bool(anime.streaming_sources),
+        'sources': list(anime.streaming_sources.keys()) if anime.streaming_sources else [],
+        'anime': anime.to_dict()
     })

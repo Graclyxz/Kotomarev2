@@ -1,4 +1,4 @@
-from app.services.anime_service import AnimeService
 from app.services.auth_service import AuthService
+from app.services.anilist_service import AniListService
 
-__all__ = ['AnimeService', 'AuthService']
+__all__ = ['AuthService', 'AniListService']
