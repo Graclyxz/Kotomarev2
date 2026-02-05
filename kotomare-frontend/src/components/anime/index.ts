@@ -5,3 +5,7 @@ export { AnimeCarousel } from './AnimeCarousel';
 export { EpisodeList } from './EpisodeList';
 export { VideoPlayer } from './VideoPlayer';
 export { RecentEpisodes } from './RecentEpisodes';
+export { PersonCard } from './PersonCard';
+export { AnimeCardMini, RecommendationCard } from './AnimeCardMini';
+export { StreamingLinkModal } from './StreamingLinkModal';
+export { AnimeInfoSidebar, translateStatus, translateFormat } from './AnimeInfoSidebar';

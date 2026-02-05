@@ -108,7 +108,7 @@ export function AnimeHero({
                 <span className="text-xl font-semibold text-white">
                   {rating}
                 </span>
-                <span className="text-gray-300">/ 5</span>
+                <span className="text-gray-300">/ 10</span>
               </div>
             )}
 

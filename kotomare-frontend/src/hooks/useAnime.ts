@@ -2,24 +2,28 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import {
-  animeApi,
-  adminApi,
-  Anime,
-  RecentEpisode,
+  anilistApi,
+  scrapeApi,
+  localApi,
+  AniListAnime,
+  VideoServer,
   Episode,
-  VideoSource,
-  SyncAllResult,
+  AnimeFLVSearchResult,
 } from '@/lib/api';
 
-// Hook for featured animes (carousel)
-export function useFeaturedAnimes(limit = 5) {
-  const [animes, setAnimes] = useState<Anime[]>([]);
+// ============== HOOKS DE ANILIST (CATÁLOGO) ==============
+
+/**
+ * Hook para obtener animes en tendencia (para carrusel/hero)
+ */
+export function useTrendingAnimes(limit = 10) {
+  const [animes, setAnimes] = useState<AniListAnime[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const refetch = useCallback(async () => {
     setIsLoading(true);
-    const { data, error } = await animeApi.getFeaturedAnimes(limit);
+    const { data, error } = await anilistApi.getTrending(limit);
 
     if (error) {
       setError(error);
@@ -37,41 +41,73 @@ export function useFeaturedAnimes(limit = 5) {
   return { animes, isLoading, error, refetch };
 }
 
-// Hook for recent episodes
-export function useRecentEpisodes(limit = 20) {
-  const [episodes, setEpisodes] = useState<RecentEpisode[]>([]);
+/**
+ * Hook para obtener animes populares
+ */
+export function usePopularAnimes(page = 1, limit = 12) {
+  const [animes, setAnimes] = useState<AniListAnime[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const refetch = useCallback(async () => {
     setIsLoading(true);
-    const { data, error } = await animeApi.getRecentEpisodes(limit);
+    const { data, error } = await anilistApi.getPopular(page, limit);
 
     if (error) {
       setError(error);
     } else if (data) {
-      setEpisodes(data.episodes);
+      setAnimes(data.animes);
       setError(null);
     }
     setIsLoading(false);
-  }, [limit]);
+  }, [page, limit]);
 
   useEffect(() => {
     refetch();
   }, [refetch]);
 
-  return { episodes, isLoading, error, refetch };
+  return { animes, isLoading, error, refetch };
 }
 
-// Hook for popular animes
-export function usePopularAnimes(limit = 12) {
-  const [animes, setAnimes] = useState<Anime[]>([]);
+/**
+ * Hook para obtener animes de temporada
+ */
+export function useSeasonalAnimes(season?: string, year?: number, limit = 12) {
+  const [animes, setAnimes] = useState<AniListAnime[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const refetch = useCallback(async () => {
     setIsLoading(true);
-    const { data, error } = await animeApi.getPopularAnimes(limit);
+    const { data, error } = await anilistApi.getSeasonal(season, year, 1, limit);
+
+    if (error) {
+      setError(error);
+    } else if (data) {
+      setAnimes(data.animes);
+      setError(null);
+    }
+    setIsLoading(false);
+  }, [season, year, limit]);
+
+  useEffect(() => {
+    refetch();
+  }, [refetch]);
+
+  return { animes, isLoading, error, refetch };
+}
+
+/**
+ * Hook para obtener animes en emisión
+ */
+export function useAiringAnimes(limit = 12) {
+  const [animes, setAnimes] = useState<AniListAnime[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const refetch = useCallback(async () => {
+    setIsLoading(true);
+    const { data, error } = await anilistApi.getAiring(1, limit);
 
     if (error) {
       setError(error);
@@ -89,40 +125,16 @@ export function usePopularAnimes(limit = 12) {
   return { animes, isLoading, error, refetch };
 }
 
-// Hook for latest animes
-export function useLatestAnimes(limit = 12) {
-  const [animes, setAnimes] = useState<Anime[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  const refetch = useCallback(async () => {
-    setIsLoading(true);
-    const { data, error } = await animeApi.getLatestAnimes(limit);
-
-    if (error) {
-      setError(error);
-    } else if (data) {
-      setAnimes(data.animes);
-      setError(null);
-    }
-    setIsLoading(false);
-  }, [limit]);
-
-  useEffect(() => {
-    refetch();
-  }, [refetch]);
-
-  return { animes, isLoading, error, refetch };
-}
-
-// Hook for anime search
+/**
+ * Hook para búsqueda de animes
+ */
 export function useAnimeSearch() {
-  const [results, setResults] = useState<Anime[]>([]);
+  const [results, setResults] = useState<AniListAnime[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const search = useCallback(async (query: string) => {
-    if (!query || query.length < 3) {
+    if (!query || query.length < 2) {
       setResults([]);
       return;
     }
@@ -130,7 +142,78 @@ export function useAnimeSearch() {
     setIsLoading(true);
     setError(null);
 
-    const { data, error } = await animeApi.search(query);
+    const { data, error } = await anilistApi.search(query);
+
+    if (error) {
+      setError(error);
+    } else if (data) {
+      setResults(data.animes);
+    }
+    setIsLoading(false);
+  }, []);
+
+  const clearResults = useCallback(() => {
+    setResults([]);
+    setError(null);
+  }, []);
+
+  return { results, isLoading, error, search, clearResults };
+}
+
+/**
+ * Hook para obtener detalle de un anime
+ */
+export function useAnimeDetail(anilistId: number | null, full = false) {
+  const [anime, setAnime] = useState<AniListAnime | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!anilistId) {
+      setIsLoading(false);
+      return;
+    }
+
+    const fetchAnime = async () => {
+      setIsLoading(true);
+      const { data, error } = full
+        ? await anilistApi.getAnimeFull(anilistId)
+        : await anilistApi.getAnime(anilistId);
+
+      if (error) {
+        setError(error);
+      } else if (data) {
+        setAnime(data.anime);
+      }
+      setIsLoading(false);
+    };
+
+    fetchAnime();
+  }, [anilistId, full]);
+
+  return { anime, isLoading, error };
+}
+
+// ============== HOOKS DE SCRAPING (VIDEOS) ==============
+
+/**
+ * Hook para buscar anime en AnimeFLV
+ */
+export function useAnimeFLVSearch() {
+  const [results, setResults] = useState<AnimeFLVSearchResult[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const search = useCallback(async (query: string) => {
+    if (!query || query.length < 2) {
+      setResults([]);
+      return;
+    }
+
+    setIsLoading(true);
+    setError(null);
+
+    const { data, error } = await scrapeApi.searchAnimeFLV(query);
 
     if (error) {
       setError(error);
@@ -148,108 +231,175 @@ export function useAnimeSearch() {
   return { results, isLoading, error, search, clearResults };
 }
 
-// Hook for anime detail
-export function useAnimeDetail(slug: string) {
-  const [anime, setAnime] = useState<Anime | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+/**
+ * Hook para vincular anime con AnimeFLV
+ */
+export function useLinkAnimeFLV() {
+  const [isLinking, setIsLinking] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const link = useCallback(async (data: {
+    anilist_id: number;
+    title: string;
+    cover_image?: string;
+    animeflv_id: string;
+  }) => {
+    setIsLinking(true);
+    setError(null);
+
+    const response = await scrapeApi.linkAnimeFLV(data);
+
+    if (response.error) {
+      setError(response.error);
+      setIsLinking(false);
+      return null;
+    }
+
+    setIsLinking(false);
+    return response.data;
+  }, []);
+
+  return { link, isLinking, error };
+}
+
+/**
+ * Hook para obtener servidores de video
+ */
+export function useVideoServers(animeflvId: string | null, episode: number | null) {
+  const [servers, setServers] = useState<VideoServer[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!slug) return;
+    if (!animeflvId || !episode) {
+      setServers([]);
+      return;
+    }
 
-    const fetchAnime = async () => {
+    const fetchServers = async () => {
       setIsLoading(true);
-      const { data, error } = await animeApi.getAnimeDetail(slug);
+      const { data, error } = await scrapeApi.getVideoServers(animeflvId, episode);
 
       if (error) {
         setError(error);
       } else if (data) {
-        setAnime(data.anime);
+        setServers(data.servers);
       }
       setIsLoading(false);
     };
 
-    fetchAnime();
-  }, [slug]);
+    fetchServers();
+  }, [animeflvId, episode]);
 
-  return { anime, isLoading, error };
+  return { servers, isLoading, error };
 }
 
-// Hook for episodes list
-export function useEpisodes(slug: string, source = 'animeflv') {
+/**
+ * Hook para obtener episodios recientes de AnimeFLV
+ */
+export function useRecentEpisodes(limit = 20) {
+  const [episodes, setEpisodes] = useState<Array<{
+    id: string;
+    anime_id: string;
+    anime_title: string;
+    episode_number: number;
+    thumbnail: string;
+    url: string;
+  }>>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const refetch = useCallback(async () => {
+    setIsLoading(true);
+    const { data, error } = await scrapeApi.getRecentEpisodes(limit);
+
+    if (error) {
+      setError(error);
+    } else if (data) {
+      setEpisodes(data.episodes);
+      setError(null);
+    }
+    setIsLoading(false);
+  }, [limit]);
+
+  useEffect(() => {
+    refetch();
+  }, [refetch]);
+
+  return { episodes, isLoading, error, refetch };
+}
+
+// ============== HOOKS DE BD LOCAL ==============
+
+/**
+ * Hook para verificar si un anime tiene fuentes en la BD
+ */
+export function useAnimeCheck(anilistId: number | null) {
+  const [exists, setExists] = useState(false);
+  const [hasStreaming, setHasStreaming] = useState(false);
+  const [sources, setSources] = useState<string[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    if (!anilistId) {
+      setIsLoading(false);
+      return;
+    }
+
+    const check = async () => {
+      setIsLoading(true);
+      const { data } = await localApi.checkAnime(anilistId);
+
+      if (data) {
+        setExists(data.exists);
+        setHasStreaming(data.has_streaming);
+        setSources(data.sources);
+      }
+      setIsLoading(false);
+    };
+
+    check();
+  }, [anilistId]);
+
+  return { exists, hasStreaming, sources, isLoading };
+}
+
+/**
+ * Hook para obtener episodios guardados de un anime
+ */
+export function useSavedEpisodes(anilistId: number | null, source: string) {
   const [episodes, setEpisodes] = useState<Episode[]>([]);
+  const [sourceId, setSourceId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!slug) return;
+    if (!anilistId || !source) {
+      setIsLoading(false);
+      return;
+    }
 
     const fetchEpisodes = async () => {
       setIsLoading(true);
-      const { data, error } = await animeApi.getEpisodes(slug, source);
+      const { data, error } = await localApi.getAnimeEpisodes(anilistId, source);
 
       if (error) {
         setError(error);
       } else if (data) {
         setEpisodes(data.episodes);
+        setSourceId(data.source_id);
       }
       setIsLoading(false);
     };
 
     fetchEpisodes();
-  }, [slug, source]);
+  }, [anilistId, source]);
 
-  return { episodes, isLoading, error };
+  return { episodes, sourceId, isLoading, error };
 }
 
-// Hook for video sources
-export function useVideoSources(slug: string, episodeNumber: number, source = 'animeflv') {
-  const [videos, setVideos] = useState<VideoSource[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+// ============== ALIASES PARA COMPATIBILIDAD ==============
 
-  useEffect(() => {
-    if (!slug || !episodeNumber) return;
-
-    const fetchVideos = async () => {
-      setIsLoading(true);
-      const { data, error } = await animeApi.getVideoSources(slug, episodeNumber, source);
-
-      if (error) {
-        setError(error);
-      } else if (data) {
-        setVideos(data.videos);
-      }
-      setIsLoading(false);
-    };
-
-    fetchVideos();
-  }, [slug, episodeNumber, source]);
-
-  return { videos, isLoading, error };
-}
-
-// Hook for admin sync
-export function useAdminSync() {
-  const [isSyncing, setIsSyncing] = useState(false);
-  const [lastResult, setLastResult] = useState<SyncAllResult | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  const syncAll = useCallback(async () => {
-    setIsSyncing(true);
-    setError(null);
-
-    const { data, error } = await adminApi.syncAll();
-
-    if (error) {
-      setError(error);
-    } else if (data) {
-      setLastResult(data);
-    }
-    setIsSyncing(false);
-
-    return data;
-  }, []);
-
-  return { syncAll, isSyncing, lastResult, error };
-}
+// Mantener nombres antiguos para compatibilidad con código existente
+export const useFeaturedAnimes = useTrendingAnimes;
+export const useLatestAnimes = useSeasonalAnimes;

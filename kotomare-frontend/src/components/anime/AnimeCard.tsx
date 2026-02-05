@@ -17,7 +17,7 @@ interface AnimeCardProps {
 }
 
 export function AnimeCard({
-  slug,
+  id,
   title,
   coverImage,
   type,
@@ -25,7 +25,7 @@ export function AnimeCard({
   className = '',
 }: AnimeCardProps) {
   return (
-    <Link href={`/anime/${slug}`} className={`group block ${className}`}>
+    <Link href={`/anime/${id}`} className={`group block ${className}`}>
       <div
         className="relative aspect-[2/3] rounded-lg overflow-hidden"
         style={{ backgroundColor: 'var(--background-secondary)' }}

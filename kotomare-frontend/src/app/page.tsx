@@ -1,107 +1,104 @@
 'use client';
 
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo } from 'react';
 import { Navbar, Footer, Container } from '@/components/layout';
 import {
-  Button, Card, CardContent, Tabs, TabsList, TabsTrigger, TabsContent,
-  Modal, Skeleton, ThemeSelector
+  Button, Card, CardContent, Modal, Skeleton, ThemeSelector
 } from '@/components/ui';
 import { AnimeGrid, AnimeCarousel, RecentEpisodes } from '@/components/anime';
 import {
-  useFeaturedAnimes,
+  useTrendingAnimes,
   useRecentEpisodes,
   usePopularAnimes,
-  useLatestAnimes,
-  useAdminSync
+  useSeasonalAnimes,
+  useAiringAnimes,
 } from '@/hooks/useAnime';
 
 export default function HomePage() {
   const [themeModalOpen, setThemeModalOpen] = useState(false);
-  const [syncModalOpen, setSyncModalOpen] = useState(false);
 
-  // Fetch data from database
-  const { animes: featuredAnimes, isLoading: loadingFeatured, refetch: refetchFeatured } = useFeaturedAnimes(5);
-  const { episodes: recentEpisodesData, isLoading: loadingEpisodes, error: episodesError, refetch: refetchEpisodes } = useRecentEpisodes(10);
-  const { animes: popularAnimesData, isLoading: loadingPopular, error: popularError, refetch: refetchPopular } = usePopularAnimes(12);
-  const { animes: latestAnimesData, isLoading: loadingLatest, error: latestError, refetch: refetchLatest } = useLatestAnimes(12);
+  // Fetch data from AniList (real-time)
+  const { animes: trendingAnimes, isLoading: loadingTrending } = useTrendingAnimes(5);
+  const { animes: popularAnimes, isLoading: loadingPopular } = usePopularAnimes(1, 12);
+  const { animes: airingAnimes, isLoading: loadingAiring } = useAiringAnimes(12);
+  const { animes: seasonalAnimes, isLoading: loadingSeasonal } = useSeasonalAnimes(undefined, undefined, 12);
 
-  // Admin sync
-  const { syncAll, isSyncing, lastResult } = useAdminSync();
+  // Fetch recent episodes from AnimeFLV
+  const { episodes: recentEpisodesData, isLoading: loadingEpisodes, error: episodesError } = useRecentEpisodes(10);
 
-  // Handle sync button
-  const handleSync = useCallback(async () => {
-    const result = await syncAll();
-    if (result?.success) {
-      // Refetch all data after sync
-      refetchFeatured();
-      refetchEpisodes();
-      refetchPopular();
-      refetchLatest();
-    }
-  }, [syncAll, refetchFeatured, refetchEpisodes, refetchPopular, refetchLatest]);
-
-  // Transform recent episodes data for RecentEpisodes component
+  // Transform recent episodes for RecentEpisodes component
   const recentEpisodes = useMemo(() => {
     return recentEpisodesData.map((ep) => ({
-      id: String(ep.id),
-      animeId: ep.anime_id,
-      animeSlug: ep.anime_slug,
+      id: ep.id,
+      animeId: 0, // No tenemos el ID de AniList aquí
+      animeSlug: ep.anime_id,
       animeTitle: ep.anime_title,
-      animeCover: ep.anime_cover || ep.thumbnail || '',
-      episodeNumber: ep.number,
+      animeCover: ep.thumbnail || '',
+      episodeNumber: ep.episode_number,
       thumbnail: ep.thumbnail,
       type: 'TV',
     }));
   }, [recentEpisodesData]);
 
-  // Transform animes data for AnimeGrid component
-  const popularAnimes = useMemo(() => {
-    return popularAnimesData.map((anime) => ({
-      id: anime.id,
+  // Transform animes for AnimeGrid component
+  const popularAnimesGrid = useMemo(() => {
+    return popularAnimes.map((anime) => ({
+      id: anime.anilist_id,
       slug: anime.slug,
       title: anime.title,
       cover_image: anime.cover_image || '',
-      type: anime.type,
-      status: anime.status,
-      sources: anime.sources,
+      type: anime.format || undefined,
+      status: anime.status || undefined,
+      genres: anime.genres,
+      average_score: anime.average_score || undefined,
     }));
-  }, [popularAnimesData]);
+  }, [popularAnimes]);
 
-  const latestAnimes = useMemo(() => {
-    return latestAnimesData.map((anime) => ({
-      id: anime.id,
+  const airingAnimesGrid = useMemo(() => {
+    return airingAnimes.map((anime) => ({
+      id: anime.anilist_id,
       slug: anime.slug,
       title: anime.title,
       cover_image: anime.cover_image || '',
-      type: anime.type,
-      status: anime.status,
-      sources: anime.sources,
+      type: anime.format || undefined,
+      status: anime.status || undefined,
+      genres: anime.genres,
+      average_score: anime.average_score || undefined,
     }));
-  }, [latestAnimesData]);
+  }, [airingAnimes]);
 
-  // Create carousel items from featured animes
+  const seasonalAnimesGrid = useMemo(() => {
+    return seasonalAnimes.map((anime) => ({
+      id: anime.anilist_id,
+      slug: anime.slug,
+      title: anime.title,
+      cover_image: anime.cover_image || '',
+      type: anime.format || undefined,
+      status: anime.status || undefined,
+      genres: anime.genres,
+      average_score: anime.average_score || undefined,
+    }));
+  }, [seasonalAnimes]);
+
+  // Create carousel items from trending animes
   const carouselItems = useMemo(() => {
-    if (featuredAnimes.length === 0) return [];
-    return featuredAnimes.map((anime) => ({
-      id: anime.id,
+    if (trendingAnimes.length === 0) return [];
+    return trendingAnimes.map((anime) => ({
+      id: anime.anilist_id,
       slug: anime.slug,
       title: anime.title,
       coverImage: anime.cover_image || '',
       bannerImage: anime.banner_image || anime.cover_image || '',
-      synopsis: anime.synopsis,
-      type: anime.type,
-      status: anime.status,
+      synopsis: anime.synopsis || undefined,
+      type: anime.format || undefined,
+      status: anime.status || undefined,
       genres: anime.genres,
-      rating: anime.sources?.animeflv?.rating,
+      rating: anime.average_score ? String(anime.average_score / 10) : undefined,
     }));
-  }, [featuredAnimes]);
-
-  // Check if database is empty (no data synced yet)
-  const isDatabaseEmpty = !loadingFeatured && !loadingPopular && !loadingLatest &&
-    featuredAnimes.length === 0 && popularAnimesData.length === 0 && latestAnimesData.length === 0;
+  }, [trendingAnimes]);
 
   // Show loading state for carousel
-  const isCarouselLoading = loadingFeatured && carouselItems.length === 0;
+  const isCarouselLoading = loadingTrending && carouselItems.length === 0;
 
   return (
     <div className="min-h-screen flex flex-col" style={{ backgroundColor: 'var(--background)' }}>
@@ -111,151 +108,84 @@ export default function HomePage() {
       />
 
       <main className="flex-1 pt-16">
-        {/* Admin Sync Button - Visible for now */}
-        <Container className="py-4">
-          <div className="flex items-center justify-between p-4 rounded-xl" style={{ backgroundColor: 'var(--background-secondary)' }}>
-            <div>
-              <h3 className="font-semibold" style={{ color: 'var(--foreground)' }}>
-                Panel de Administración
-              </h3>
-              <p className="text-sm" style={{ color: 'var(--foreground-secondary)' }}>
-                {isDatabaseEmpty
-                  ? 'La base de datos está vacía. Sincroniza para cargar animes desde AnimeFLV.'
-                  : 'Sincroniza para actualizar el contenido desde AnimeFLV.'}
-              </p>
-            </div>
-            <div className="flex items-center gap-3">
-              <Button
-                variant="ghost"
-                onClick={() => setSyncModalOpen(true)}
-              >
-                Ver detalles
-              </Button>
-              <Button
-                onClick={handleSync}
-                isLoading={isSyncing}
-                disabled={isSyncing}
-              >
-                <svg className="w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                </svg>
-                {isSyncing ? 'Sincronizando...' : 'Sincronizar Todo'}
-              </Button>
+        {/* Hero Carousel - Trending Animes */}
+        {!isCarouselLoading && carouselItems.length > 0 && (
+          <AnimeCarousel items={carouselItems} />
+        )}
+        {isCarouselLoading && (
+          <div className="h-[500px] md:h-[550px] lg:h-[600px] flex items-center justify-center" style={{ backgroundColor: 'var(--background-secondary)' }}>
+            <div className="text-center">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 mx-auto mb-4" style={{ borderColor: 'var(--primary)' }}></div>
+              <p style={{ color: 'var(--foreground-secondary)' }}>Cargando animes...</p>
             </div>
           </div>
+        )}
+
+        {/* Recent Episodes Section - From AnimeFLV */}
+        <Container className="py-8">
+          {episodesError ? (
+            <div className="text-center py-8">
+              <p style={{ color: 'var(--error)' }}>Error al cargar episodios: {episodesError}</p>
+            </div>
+          ) : loadingEpisodes ? (
+            <div>
+              <div className="mb-6">
+                <Skeleton className="h-8 w-48 mb-2" />
+                <Skeleton className="h-4 w-72" />
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-5 gap-4 md:gap-5">
+                {Array.from({ length: 10 }).map((_, i) => (
+                  <div key={i}>
+                    <Skeleton className="aspect-[16/10] rounded-xl mb-1" />
+                    <Skeleton className="h-4 w-full" />
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : recentEpisodes.length > 0 ? (
+            <RecentEpisodes
+              episodes={recentEpisodes}
+              title="Episodios recientes"
+              subtitle="Últimos capítulos de AnimeFLV"
+            />
+          ) : null}
         </Container>
 
-        {/* Empty State */}
-        {isDatabaseEmpty && !isSyncing && (
-          <Container className="py-16">
-            <div className="text-center">
-              <svg
-                className="w-24 h-24 mx-auto mb-6"
-                style={{ color: 'var(--foreground-muted)' }}
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
-              </svg>
-              <h2 className="text-2xl font-bold mb-2" style={{ color: 'var(--foreground)' }}>
-                Base de datos vacía
-              </h2>
-              <p className="mb-6" style={{ color: 'var(--foreground-secondary)' }}>
-                Presiona el botón &quot;Sincronizar Todo&quot; para cargar animes desde AnimeFLV.
-              </p>
-              <Button onClick={handleSync} size="lg">
-                <svg className="w-5 h-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                </svg>
-                Sincronizar Ahora
-              </Button>
-            </div>
-          </Container>
-        )}
+        {/* Airing Anime Section */}
+        <Container className="py-8">
+          <AnimeGrid
+            animes={airingAnimesGrid}
+            isLoading={loadingAiring}
+            skeletonCount={12}
+            title="En Emisión"
+            subtitle="Animes que se están emitiendo actualmente"
+            viewAllLink="/browse?status=RELEASING"
+          />
+        </Container>
 
-        {/* Hero Carousel - Full width, no padding */}
-        {!isDatabaseEmpty && (
-          <>
-            {!isCarouselLoading && carouselItems.length > 0 && (
-              <AnimeCarousel items={carouselItems} />
-            )}
-            {isCarouselLoading && (
-              <div className="h-[500px] md:h-[550px] lg:h-[600px] flex items-center justify-center" style={{ backgroundColor: 'var(--background-secondary)' }}>
-                <div className="text-center">
-                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 mx-auto mb-4" style={{ borderColor: 'var(--primary)' }}></div>
-                  <p style={{ color: 'var(--foreground-secondary)' }}>Cargando animes...</p>
-                </div>
-              </div>
-            )}
+        {/* Popular Anime Section */}
+        <Container className="py-8">
+          <AnimeGrid
+            animes={popularAnimesGrid}
+            isLoading={loadingPopular}
+            skeletonCount={12}
+            title="Populares"
+            subtitle="Los animes más populares de AniList"
+            viewAllLink="/browse?sort=POPULARITY_DESC"
+          />
+        </Container>
 
-            {/* Recent Episodes Section */}
-            <Container className="py-8">
-              {episodesError ? (
-                <div className="text-center py-8">
-                  <p style={{ color: 'var(--error)' }}>Error al cargar episodios: {episodesError}</p>
-                </div>
-              ) : loadingEpisodes ? (
-                <div>
-                  <div className="mb-6">
-                    <Skeleton className="h-8 w-48 mb-2" />
-                    <Skeleton className="h-4 w-72" />
-                  </div>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-5 gap-4 md:gap-5">
-                    {Array.from({ length: 10 }).map((_, i) => (
-                      <div key={i}>
-                        <Skeleton className="aspect-[16/10] rounded-xl mb-1" />
-                        <Skeleton className="h-4 w-full" />
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ) : recentEpisodes.length > 0 ? (
-                <RecentEpisodes
-                  episodes={recentEpisodes}
-                  title="Episodios recientes"
-                  subtitle="Últimos capítulos de AnimeFLV"
-                />
-              ) : null}
-            </Container>
-
-            {/* Popular Anime Section - Animes en emisión */}
-            <Container className="py-8">
-              {popularError ? (
-                <div className="text-center py-8">
-                  <p style={{ color: 'var(--error)' }}>Error al cargar animes populares: {popularError}</p>
-                </div>
-              ) : (
-                <AnimeGrid
-                  animes={popularAnimes}
-                  isLoading={loadingPopular}
-                  skeletonCount={12}
-                  title="En Emisión"
-                  subtitle="Animes que se están emitiendo actualmente"
-                  viewAllLink="/browse?status=airing"
-                />
-              )}
-            </Container>
-
-            {/* Latest Anime Section */}
-            <Container className="py-8">
-              {latestError ? (
-                <div className="text-center py-8">
-                  <p style={{ color: 'var(--error)' }}>Error al cargar últimos animes: {latestError}</p>
-                </div>
-              ) : (
-                <AnimeGrid
-                  animes={latestAnimes}
-                  isLoading={loadingLatest}
-                  skeletonCount={12}
-                  title="Últimos Agregados"
-                  subtitle="Animes recientemente añadidos al catálogo"
-                  viewAllLink="/browse?order=added"
-                />
-              )}
-            </Container>
-          </>
-        )}
+        {/* Seasonal Anime Section */}
+        <Container className="py-8">
+          <AnimeGrid
+            animes={seasonalAnimesGrid}
+            isLoading={loadingSeasonal}
+            skeletonCount={12}
+            title="Temporada Actual"
+            subtitle="Animes de esta temporada"
+            viewAllLink="/browse"
+          />
+        </Container>
 
         {/* Theme Selector Section */}
         <Container className="py-8">
@@ -292,59 +222,6 @@ export default function HomePage() {
       {/* Theme Selector Modal */}
       <Modal isOpen={themeModalOpen} onClose={() => setThemeModalOpen(false)} title="Selector de Temas" size="lg">
         <ThemeSelector onClose={() => setThemeModalOpen(false)} />
-      </Modal>
-
-      {/* Sync Details Modal */}
-      <Modal isOpen={syncModalOpen} onClose={() => setSyncModalOpen(false)} title="Detalles de Sincronización" size="md">
-        <div className="space-y-4">
-          {lastResult ? (
-            <>
-              <div className="flex items-center gap-2 mb-4">
-                {lastResult.success ? (
-                  <>
-                    <svg className="w-6 h-6 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                    </svg>
-                    <span className="font-semibold text-green-500">Sincronización exitosa</span>
-                  </>
-                ) : (
-                  <>
-                    <svg className="w-6 h-6 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                    <span className="font-semibold text-red-500">Error en sincronización</span>
-                  </>
-                )}
-              </div>
-
-              <div className="space-y-2">
-                <h4 className="font-medium" style={{ color: 'var(--foreground)' }}>Resultados:</h4>
-                {Object.entries(lastResult.results).map(([key, value]) => (
-                  <div key={key} className="p-3 rounded-lg" style={{ backgroundColor: 'var(--background-secondary)' }}>
-                    <span className="font-medium capitalize">{key.replace('_', ' ')}: </span>
-                    {value.success ? (
-                      <span style={{ color: 'var(--success)' }}>
-                        {value.created || 0} creados, {value.updated || 0} actualizados
-                      </span>
-                    ) : (
-                      <span style={{ color: 'var(--error)' }}>{value.error}</span>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </>
-          ) : (
-            <p style={{ color: 'var(--foreground-secondary)' }}>
-              No hay resultados de sincronización aún. Presiona &quot;Sincronizar Todo&quot; para comenzar.
-            </p>
-          )}
-
-          <div className="flex justify-end pt-4">
-            <Button variant="ghost" onClick={() => setSyncModalOpen(false)}>
-              Cerrar
-            </Button>
-          </div>
-        </div>
       </Modal>
     </div>
   );

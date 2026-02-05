@@ -23,7 +23,7 @@ export function Navbar({ user, onSearch, onLogout }: NavbarProps) {
     if (onSearch) {
       onSearch(query);
     } else {
-      window.location.href = `/search?q=${encodeURIComponent(query)}`;
+      window.location.href = `/buscar?q=${encodeURIComponent(query)}`;
     }
   };
 
@@ -63,7 +63,7 @@ export function Navbar({ user, onSearch, onLogout }: NavbarProps) {
             {/* Nav links - Desktop */}
             <div className="hidden md:flex items-center gap-6">
               <Link
-                href="/browse"
+                href="/buscar"
                 className="hover:opacity-80 transition-opacity"
                 style={{ color: 'var(--foreground-secondary)' }}
               >
@@ -156,7 +156,7 @@ export function Navbar({ user, onSearch, onLogout }: NavbarProps) {
             </div>
             <div className="flex flex-col gap-2">
               <Link
-                href="/browse"
+                href="/buscar"
                 className="px-4 py-2 rounded-lg hover:opacity-80"
                 style={{ color: 'var(--foreground-secondary)' }}
               >
