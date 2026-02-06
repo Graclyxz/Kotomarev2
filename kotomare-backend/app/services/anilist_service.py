@@ -537,6 +537,89 @@ class AniListService:
         }
 
     @classmethod
+    def get_character(cls, character_id: int) -> Optional[Dict]:
+        """Obtiene información detallada de un personaje por su ID"""
+        query = """
+        query ($id: Int) {
+            Character(id: $id) {
+                id
+                name {
+                    full
+                    native
+                    alternative
+                }
+                image { large }
+                description(asHtml: false)
+                gender
+                age
+                bloodType
+                dateOfBirth { year month day }
+                favourites
+                siteUrl
+                media(sort: [POPULARITY_DESC], perPage: 12) {
+                    edges {
+                        characterRole
+                        node {
+                            id
+                            title { romaji english }
+                            coverImage { medium }
+                            format
+                            type
+                        }
+                    }
+                }
+            }
+        }
+        """
+        data = cls._execute_query(query, {'id': character_id})
+        if not data or not data.get('Character'):
+            return None
+
+        char = data['Character']
+        date_of_birth = char.get('dateOfBirth') or {}
+        birth_parts = []
+        if date_of_birth.get('day'):
+            birth_parts.append(str(date_of_birth['day']))
+        if date_of_birth.get('month'):
+            months = ['', 'Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun',
+                       'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
+            month_idx = date_of_birth['month']
+            if 1 <= month_idx <= 12:
+                birth_parts.append(months[month_idx])
+        if date_of_birth.get('year'):
+            birth_parts.append(str(date_of_birth['year']))
+        birth_str = ' '.join(birth_parts) if birth_parts else None
+
+        media = []
+        for edge in char.get('media', {}).get('edges', []):
+            node = edge.get('node', {})
+            if node.get('type') != 'ANIME':
+                continue
+            media.append({
+                'id': node.get('id'),
+                'title': node.get('title', {}).get('english') or node.get('title', {}).get('romaji'),
+                'cover_image': node.get('coverImage', {}).get('medium'),
+                'format': node.get('format'),
+                'role': edge.get('characterRole'),
+            })
+
+        return {
+            'id': char.get('id'),
+            'name': char.get('name', {}).get('full'),
+            'name_native': char.get('name', {}).get('native'),
+            'name_alternative': char.get('name', {}).get('alternative', []),
+            'image': char.get('image', {}).get('large'),
+            'description': char.get('description'),
+            'gender': char.get('gender'),
+            'age': char.get('age'),
+            'blood_type': char.get('bloodType'),
+            'date_of_birth': birth_str,
+            'favourites': char.get('favourites'),
+            'site_url': char.get('siteUrl'),
+            'media': media,
+        }
+
+    @classmethod
     def search(cls, query_text: str, page: int = 1, per_page: int = 20) -> List[Dict]:
         """Busca animes por texto"""
         query = f"""
@@ -835,7 +918,7 @@ class AniListService:
 
             # Datos principales
             'title': main_title,
-            'synopsis': media.get('description'),
+            'synopsis': re.sub(r'<br\s*/?>', '\n', media.get('description') or '').strip() or None,
             'cover_image': cover_image,
             'banner_image': media.get('bannerImage'),
 

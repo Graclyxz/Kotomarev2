@@ -197,6 +197,24 @@ def get_anime_staff(anilist_id):
     })
 
 
+# ============== DETALLE DE PERSONAJE ==============
+
+@bp.route('/character/<int:character_id>', methods=['GET'])
+def get_character(character_id):
+    """
+    Obtiene información detallada de un personaje por su ID de AniList.
+    """
+    character = AniListService.get_character(character_id)
+
+    if not character:
+        return jsonify({'error': 'Personaje no encontrado en AniList'}), 404
+
+    return jsonify({
+        'character': character,
+        'source': 'anilist'
+    })
+
+
 # ============== BÚSQUEDA ==============
 
 @bp.route('/search', methods=['GET'])
