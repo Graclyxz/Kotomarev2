@@ -127,9 +127,9 @@ export function AnimeInfoSidebar({ anime }: AnimeInfoSidebarProps) {
               Estudios
             </h3>
             <div className="flex flex-wrap gap-2">
-              {anime.studios.map((studio) => (
+              {anime.studios.map((studio, index) => (
                 <Badge
-                  key={studio.id}
+                  key={`${studio.id}-${index}`}
                   variant={studio.is_animation_studio ? 'info' : 'default'}
                 >
                   {studio.name}

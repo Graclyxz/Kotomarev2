@@ -10,16 +10,15 @@ import {
   PersonCard,
   AnimeCardMini,
   RecommendationCard,
-  StreamingLinkModal,
   AnimeInfoSidebar,
   translateStatus,
   translateFormat,
+  CharacterModal,
 } from '@/components/anime';
 import {
   Button,
   Card,
   CardContent,
-  Badge,
   Skeleton,
   Tabs,
   TabsList,
@@ -32,7 +31,7 @@ import {
   LinkIcon,
   ErrorIcon,
 } from '@/components/ui';
-import { anilistApi, scrapeApi, localApi, AniListAnime, AnimeFLVSearchResult, Episode } from '@/lib/api';
+import { anilistApi, scrapeApi, AniListAnime, Episode } from '@/lib/api';
 import { VOICE_LANGUAGES, LANGUAGE_LABELS } from '@/hooks/usePaginatedData';
 
 export default function AnimePage() {
@@ -44,18 +43,9 @@ export default function AnimePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Streaming state
-  const [hasStreaming, setHasStreaming] = useState(false);
-  const [streamingSources, setStreamingSources] = useState<string[]>([]);
+  // Episodes state (scraped on-demand)
   const [episodes, setEpisodes] = useState<Episode[]>([]);
   const [loadingEpisodes, setLoadingEpisodes] = useState(false);
-
-  // Modal state
-  const [linkModalOpen, setLinkModalOpen] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [searchResults, setSearchResults] = useState<AnimeFLVSearchResult[]>([]);
-  const [searching, setSearching] = useState(false);
-  const [linking, setLinking] = useState(false);
 
   // Pagination state
   const [charactersPage, setCharactersPage] = useState(1);
@@ -64,6 +54,9 @@ export default function AnimePage() {
   const [staffPage, setStaffPage] = useState(1);
   const [staffHasNext, setStaffHasNext] = useState(false);
   const [loadingMoreStaff, setLoadingMoreStaff] = useState(false);
+
+  // Character modal state
+  const [selectedCharacterId, setSelectedCharacterId] = useState<number | null>(null);
 
   // Voice actors state
   const [voiceLanguage, setVoiceLanguage] = useState('JAPANESE');
@@ -96,22 +89,14 @@ export default function AnimePage() {
 
         if (data?.anime) {
           setAnime(data.anime);
-          setSearchQuery(data.anime.title);
           const pagination = (data.anime as unknown as { _pagination?: { characters?: { has_next: boolean }; staff?: { has_next: boolean } } })._pagination;
           if (pagination) {
             setCharactersHasNext(pagination.characters?.has_next || false);
             setStaffHasNext(pagination.staff?.has_next || false);
           }
-        }
 
-        const { data: checkData } = await localApi.checkAnime(animeId);
-        if (checkData) {
-          setHasStreaming(checkData.has_streaming);
-          setStreamingSources(checkData.sources || []);
-
-          if (checkData.has_streaming && checkData.sources?.length > 0) {
-            loadEpisodes(checkData.sources[0]);
-          }
+          // Search for anime in AnimeFLV to get episodes
+          searchAndLoadEpisodes(data.anime.title);
         }
       } catch {
         setError('Error al cargar el anime');
@@ -123,53 +108,21 @@ export default function AnimePage() {
     loadAnime();
   }, [animeId]);
 
-  // Load episodes
-  const loadEpisodes = async (source: string) => {
+  // Search AnimeFLV and load episodes automatically
+  const searchAndLoadEpisodes = async (title: string) => {
     setLoadingEpisodes(true);
     try {
-      const { data } = await localApi.getAnimeEpisodes(animeId, source);
-      if (data) {
-        setEpisodes(data.episodes);
+      const { data: searchData } = await scrapeApi.searchAnimeFLV(title);
+      if (searchData && searchData.results.length > 0) {
+        const firstResult = searchData.results[0];
+
+        const { data: episodesData } = await scrapeApi.getAnimeFLVEpisodes(firstResult.id);
+        if (episodesData) {
+          setEpisodes(episodesData.episodes);
+        }
       }
     } finally {
       setLoadingEpisodes(false);
-    }
-  };
-
-  // Search AnimeFLV
-  const searchAnimeFLV = async () => {
-    if (!searchQuery.trim()) return;
-    setSearching(true);
-    try {
-      const { data } = await scrapeApi.searchAnimeFLV(searchQuery);
-      if (data) setSearchResults(data.results);
-    } finally {
-      setSearching(false);
-    }
-  };
-
-  // Link with AnimeFLV
-  const linkWithAnimeFLV = async (animeflvResult: AnimeFLVSearchResult) => {
-    if (!anime) return;
-    setLinking(true);
-    try {
-      const { data, error: linkError } = await scrapeApi.linkAnimeFLV({
-        anilist_id: anime.anilist_id,
-        title: anime.title,
-        cover_image: anime.cover_image || undefined,
-        animeflv_id: animeflvResult.id,
-      });
-
-      if (data) {
-        setHasStreaming(true);
-        setStreamingSources(['animeflv']);
-        setEpisodes(data.anime.episodes || []);
-        setLinkModalOpen(false);
-      } else if (linkError) {
-        alert('Error al vincular: ' + linkError);
-      }
-    } finally {
-      setLinking(false);
     }
   };
 
@@ -254,7 +207,10 @@ export default function AnimePage() {
     return (
       <Layout>
         <div className="min-h-screen">
-          <div className="relative h-[500px]" style={{ backgroundColor: 'var(--background-secondary)' }}>
+          <div
+            className="relative h-125"
+            style={{ backgroundColor: "var(--background-secondary)" }}
+          >
             <div className="absolute inset-0 flex items-end">
               <div className="max-w-7xl mx-auto px-4 pb-12 w-full">
                 <div className="flex gap-8">
@@ -279,7 +235,9 @@ export default function AnimePage() {
                 <Skeleton className="h-64 w-full rounded-xl" />
                 <Skeleton className="h-96 w-full rounded-xl" />
               </div>
-              <div><Skeleton className="h-96 w-full rounded-xl" /></div>
+              <div>
+                <Skeleton className="h-96 w-full rounded-xl" />
+              </div>
             </div>
           </div>
         </div>
@@ -298,7 +256,7 @@ export default function AnimePage() {
                 Anime no encontrado
               </h2>
               <p className="mb-4" style={{ color: 'var(--foreground-secondary)' }}>
-                {error || 'No se pudo cargar la información del anime'}
+                {error || 'No se pudo cargar la informacion del anime'}
               </p>
               <Link href="/"><Button variant="primary">Volver al inicio</Button></Link>
             </CardContent>
@@ -313,19 +271,19 @@ export default function AnimePage() {
       <div className="min-h-screen">
         <AnimeHero
           title={anime.title}
-          coverImage={anime.cover_image || '/placeholder-anime.jpg'}
+          coverImage={anime.cover_image || "/placeholder-anime.jpg"}
           bannerImage={anime.banner_image || undefined}
           synopsis={anime.synopsis || undefined}
           type={translateFormat(anime.format)}
           status={translateStatus(anime.status)}
           genres={anime.genres}
-          rating={anime.average_score ? String(anime.average_score / 10) : undefined}
+          rating={
+            anime.average_score ? String(anime.average_score / 10) : undefined
+          }
           episodeCount={anime.episodes_count || undefined}
           onPlay={() => {
-            if (hasStreaming && episodes.length > 0) {
+            if (episodes.length > 0) {
               handleSelectEpisode(episodes[0] as Episode & { url?: string });
-            } else {
-              setLinkModalOpen(true);
             }
           }}
         />
@@ -334,36 +292,33 @@ export default function AnimePage() {
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
             {/* Left Column */}
             <div className="lg:col-span-2 space-y-8">
-              {/* Streaming Section */}
+              {/* Episodes Section */}
               <Card>
                 <CardContent>
                   <div className="flex items-center justify-between mb-4">
-                    <h2 className="text-xl font-bold" style={{ color: 'var(--foreground)' }}>Ver Episodios</h2>
-                    <Badge variant={hasStreaming ? 'success' : 'warning'}>
-                      {hasStreaming ? 'Disponible' : 'Sin vincular'}
-                    </Badge>
+                    <h2
+                      className="text-xl font-bold"
+                      style={{ color: "var(--foreground)" }}
+                    >
+                      Episodios
+                    </h2>
                   </div>
 
-                  {hasStreaming ? (
-                    loadingEpisodes ? (
-                      <div className="space-y-2">
-                        {Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-12 w-full" />)}
-                      </div>
-                    ) : episodes.length > 0 ? (
-                      <EpisodeList episodes={episodes.map(ep => ({ ...ep, url: '' }))} onSelectEpisode={handleSelectEpisode} />
-                    ) : (
-                      <p style={{ color: 'var(--foreground-secondary)' }}>No hay episodios disponibles</p>
-                    )
-                  ) : (
-                    <div className="text-center py-8">
-                      <p className="mb-4" style={{ color: 'var(--foreground-secondary)' }}>
-                        Este anime no tiene una fuente de streaming vinculada.
-                      </p>
-                      <Button variant="primary" onClick={() => setLinkModalOpen(true)}>
-                        <LinkIcon />
-                        Vincular con AnimeFLV
-                      </Button>
+                  {loadingEpisodes ? (
+                    <div className="space-y-2">
+                      {Array.from({ length: 3 }).map((_, i) => (
+                        <Skeleton key={i} className="h-12 w-full" />
+                      ))}
                     </div>
+                  ) : episodes.length > 0 ? (
+                    <EpisodeList
+                      episodes={episodes.map((ep) => ({ ...ep, url: "" }))}
+                      onSelectEpisode={handleSelectEpisode}
+                    />
+                  ) : (
+                    <p style={{ color: "var(--foreground-secondary)" }}>
+                      No se encontraron episodios
+                    </p>
                   )}
                 </CardContent>
               </Card>
@@ -371,25 +326,52 @@ export default function AnimePage() {
               {/* Tabs */}
               <Tabs defaultValue="characters">
                 <TabsList>
-                  <TabsTrigger value="characters" icon={<UsersIcon />}>Personajes</TabsTrigger>
-                  <TabsTrigger value="voice-actors" icon={<MicIcon />}>Voces</TabsTrigger>
-                  <TabsTrigger value="staff" icon={<UsersIcon />}>Staff</TabsTrigger>
-                  <TabsTrigger value="relations" icon={<LinkIcon />}>Relacionados</TabsTrigger>
+                  <TabsTrigger value="characters" icon={<UsersIcon />}>
+                    Personajes
+                  </TabsTrigger>
+                  <TabsTrigger value="voice-actors" icon={<MicIcon />}>
+                    Voces
+                  </TabsTrigger>
+                  <TabsTrigger value="staff" icon={<UsersIcon />}>
+                    Staff
+                  </TabsTrigger>
+                  <TabsTrigger value="relations" icon={<LinkIcon />}>
+                    Relacionados
+                  </TabsTrigger>
                 </TabsList>
 
                 {/* Characters Tab */}
                 <TabsContent value="characters">
                   {anime.characters && anime.characters.length > 0 ? (
-                    <div className="max-h-[600px] overflow-y-auto pr-2">
+                    <div className="max-h-150 overflow-y-auto pr-2">
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         {anime.characters.map((char, index) => {
-                          const japaneseVA = char.voice_actors?.find(va => va.language === 'Japanese');
+                          const japaneseVA = char.voice_actors?.find(
+                            (va) => va.language === "Japanese",
+                          );
                           return (
-                            <PersonCard
+                            <div
                               key={`${char.id}-${index}`}
-                              person={{ image: char.image, name: char.name, subtitle: char.role }}
-                              secondaryPerson={japaneseVA ? { image: japaneseVA.image, name: japaneseVA.name, subtitle: 'Japonés' } : undefined}
-                            />
+                              onClick={() => setSelectedCharacterId(char.id)}
+                              className="cursor-pointer"
+                            >
+                              <PersonCard
+                                person={{
+                                  image: char.image,
+                                  name: char.name,
+                                  subtitle: char.role,
+                                }}
+                                secondaryPerson={
+                                  japaneseVA
+                                    ? {
+                                        image: japaneseVA.image,
+                                        name: japaneseVA.name,
+                                        subtitle: "Japones",
+                                      }
+                                    : undefined
+                                }
+                              />
+                            </div>
                           );
                         })}
                       </div>
@@ -402,7 +384,7 @@ export default function AnimePage() {
                       />
                     </div>
                   ) : (
-                    <EmptyState message="No hay información de personajes disponible" />
+                    <EmptyState message="No hay informacion de personajes disponible" />
                   )}
                 </TabsContent>
 
@@ -410,15 +392,26 @@ export default function AnimePage() {
                 <TabsContent value="voice-actors">
                   <div className="space-y-4">
                     <div className="flex items-center gap-3 flex-wrap">
-                      <span className="text-sm font-medium" style={{ color: 'var(--foreground-secondary)' }}>Idioma:</span>
-                      {VOICE_LANGUAGES.map(lang => (
+                      <span
+                        className="text-sm font-medium"
+                        style={{ color: "var(--foreground-secondary)" }}
+                      >
+                        Idioma:
+                      </span>
+                      {VOICE_LANGUAGES.map((lang) => (
                         <button
                           key={lang.value}
                           onClick={() => changeVoiceLanguage(lang.value)}
                           className="px-3 py-1.5 text-sm rounded-full transition-colors"
                           style={{
-                            backgroundColor: voiceLanguage === lang.value ? 'var(--primary)' : 'var(--background-secondary)',
-                            color: voiceLanguage === lang.value ? 'var(--primary-foreground)' : 'var(--foreground-secondary)',
+                            backgroundColor:
+                              voiceLanguage === lang.value
+                                ? "var(--primary)"
+                                : "var(--background-secondary)",
+                            color:
+                              voiceLanguage === lang.value
+                                ? "var(--primary-foreground)"
+                                : "var(--foreground-secondary)",
                           }}
                         >
                           {lang.label}
@@ -426,7 +419,7 @@ export default function AnimePage() {
                       ))}
                     </div>
 
-                    <div className="max-h-[500px] overflow-y-auto pr-2">
+                    <div className="max-h-125 overflow-y-auto pr-2">
                       {loadingVoiceActors && voiceActors.length === 0 ? (
                         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
                           {Array.from({ length: 6 }).map((_, i) => (
@@ -450,7 +443,10 @@ export default function AnimePage() {
                                 person={{
                                   image: va.image,
                                   name: va.name,
-                                  subtitle: va.characters.length === 1 ? va.characters[0].name : `${va.characters.length} personajes`,
+                                  subtitle:
+                                    va.characters.length === 1
+                                      ? va.characters[0].name
+                                      : `${va.characters.length} personajes`,
                                 }}
                               />
                             ))}
@@ -465,8 +461,9 @@ export default function AnimePage() {
                         </>
                       ) : (
                         <div className="text-center py-8">
-                          <p style={{ color: 'var(--foreground-secondary)' }}>
-                            No hay actores de voz en {LANGUAGE_LABELS[voiceLanguage] || voiceLanguage}
+                          <p style={{ color: "var(--foreground-secondary)" }}>
+                            No hay actores de voz en{" "}
+                            {LANGUAGE_LABELS[voiceLanguage] || voiceLanguage}
                           </p>
                         </div>
                       )}
@@ -477,12 +474,16 @@ export default function AnimePage() {
                 {/* Staff Tab */}
                 <TabsContent value="staff">
                   {anime.staff && anime.staff.length > 0 ? (
-                    <div className="max-h-[600px] overflow-y-auto pr-2">
+                    <div className="max-h-150 overflow-y-auto pr-2">
                       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
                         {anime.staff.map((member, index) => (
                           <PersonCard
                             key={`${member.id}-${member.role}-${index}`}
-                            person={{ image: member.image, name: member.name, subtitle: member.role }}
+                            person={{
+                              image: member.image,
+                              name: member.name,
+                              subtitle: member.role,
+                            }}
                             size="sm"
                           />
                         ))}
@@ -496,14 +497,14 @@ export default function AnimePage() {
                       />
                     </div>
                   ) : (
-                    <EmptyState message="No hay información de staff disponible" />
+                    <EmptyState message="No hay informacion de staff disponible" />
                   )}
                 </TabsContent>
 
                 {/* Relations Tab */}
                 <TabsContent value="relations">
                   {anime.relations && anime.relations.length > 0 ? (
-                    <div className="max-h-[600px] overflow-y-auto pr-2">
+                    <div className="max-h-150 overflow-y-auto pr-2">
                       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
                         {anime.relations.map((rel) => (
                           <AnimeCardMini
@@ -526,7 +527,12 @@ export default function AnimePage() {
               {/* Recommendations */}
               {anime.recommendations && anime.recommendations.length > 0 && (
                 <div>
-                  <h2 className="text-xl font-bold mb-4" style={{ color: 'var(--foreground)' }}>Recomendaciones</h2>
+                  <h2
+                    className="text-xl font-bold mb-4"
+                    style={{ color: "var(--foreground)" }}
+                  >
+                    Recomendaciones
+                  </h2>
                   <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
                     {anime.recommendations.map((rec) => (
                       <RecommendationCard
@@ -546,19 +552,13 @@ export default function AnimePage() {
             <AnimeInfoSidebar anime={anime} />
           </div>
         </div>
-
-        <StreamingLinkModal
-          isOpen={linkModalOpen}
-          onClose={() => setLinkModalOpen(false)}
-          searchQuery={searchQuery}
-          onSearchQueryChange={setSearchQuery}
-          onSearch={searchAnimeFLV}
-          searching={searching}
-          searchResults={searchResults}
-          onLink={linkWithAnimeFLV}
-          linking={linking}
-        />
       </div>
+
+      <CharacterModal
+        characterId={selectedCharacterId}
+        isOpen={selectedCharacterId !== null}
+        onClose={() => setSelectedCharacterId(null)}
+      />
     </Layout>
   );
 }

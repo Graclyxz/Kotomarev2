@@ -4,14 +4,12 @@ import { useState, useEffect, useCallback } from 'react';
 import {
   anilistApi,
   scrapeApi,
-  localApi,
   AniListAnime,
   VideoServer,
-  Episode,
   AnimeFLVSearchResult,
 } from '@/lib/api';
 
-// ============== HOOKS DE ANILIST (CATÁLOGO) ==============
+// ============== HOOKS DE ANILIST (CATALOGO) ==============
 
 /**
  * Hook para obtener animes en tendencia (para carrusel/hero)
@@ -98,7 +96,7 @@ export function useSeasonalAnimes(season?: string, year?: number, limit = 12) {
 }
 
 /**
- * Hook para obtener animes en emisión
+ * Hook para obtener animes en emision
  */
 export function useAiringAnimes(limit = 12) {
   const [animes, setAnimes] = useState<AniListAnime[]>([]);
@@ -126,7 +124,7 @@ export function useAiringAnimes(limit = 12) {
 }
 
 /**
- * Hook para búsqueda de animes
+ * Hook para busqueda de animes
  */
 export function useAnimeSearch() {
   const [results, setResults] = useState<AniListAnime[]>([]);
@@ -232,37 +230,6 @@ export function useAnimeFLVSearch() {
 }
 
 /**
- * Hook para vincular anime con AnimeFLV
- */
-export function useLinkAnimeFLV() {
-  const [isLinking, setIsLinking] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const link = useCallback(async (data: {
-    anilist_id: number;
-    title: string;
-    cover_image?: string;
-    animeflv_id: string;
-  }) => {
-    setIsLinking(true);
-    setError(null);
-
-    const response = await scrapeApi.linkAnimeFLV(data);
-
-    if (response.error) {
-      setError(response.error);
-      setIsLinking(false);
-      return null;
-    }
-
-    setIsLinking(false);
-    return response.data;
-  }, []);
-
-  return { link, isLinking, error };
-}
-
-/**
  * Hook para obtener servidores de video
  */
 export function useVideoServers(animeflvId: string | null, episode: number | null) {
@@ -329,77 +296,8 @@ export function useRecentEpisodes(limit = 20) {
   return { episodes, isLoading, error, refetch };
 }
 
-// ============== HOOKS DE BD LOCAL ==============
-
-/**
- * Hook para verificar si un anime tiene fuentes en la BD
- */
-export function useAnimeCheck(anilistId: number | null) {
-  const [exists, setExists] = useState(false);
-  const [hasStreaming, setHasStreaming] = useState(false);
-  const [sources, setSources] = useState<string[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-
-  useEffect(() => {
-    if (!anilistId) {
-      setIsLoading(false);
-      return;
-    }
-
-    const check = async () => {
-      setIsLoading(true);
-      const { data } = await localApi.checkAnime(anilistId);
-
-      if (data) {
-        setExists(data.exists);
-        setHasStreaming(data.has_streaming);
-        setSources(data.sources);
-      }
-      setIsLoading(false);
-    };
-
-    check();
-  }, [anilistId]);
-
-  return { exists, hasStreaming, sources, isLoading };
-}
-
-/**
- * Hook para obtener episodios guardados de un anime
- */
-export function useSavedEpisodes(anilistId: number | null, source: string) {
-  const [episodes, setEpisodes] = useState<Episode[]>([]);
-  const [sourceId, setSourceId] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!anilistId || !source) {
-      setIsLoading(false);
-      return;
-    }
-
-    const fetchEpisodes = async () => {
-      setIsLoading(true);
-      const { data, error } = await localApi.getAnimeEpisodes(anilistId, source);
-
-      if (error) {
-        setError(error);
-      } else if (data) {
-        setEpisodes(data.episodes);
-        setSourceId(data.source_id);
-      }
-      setIsLoading(false);
-    };
-
-    fetchEpisodes();
-  }, [anilistId, source]);
-
-  return { episodes, sourceId, isLoading, error };
-}
-
 // ============== ALIASES PARA COMPATIBILIDAD ==============
 
-// Mantener nombres antiguos para compatibilidad con código existente
+// Mantener nombres antiguos para compatibilidad con codigo existente
 export const useFeaturedAnimes = useTrendingAnimes;
 export const useLatestAnimes = useSeasonalAnimes;

@@ -4,6 +4,36 @@ import Image from 'next/image';
 import { Button } from '../ui/Button';
 import { Badge } from '../ui/Badge';
 
+function genreColorFromName(name: string): string {
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) {
+    hash = name.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  const hue = ((hash % 360) + 360) % 360;
+  return `hsla(${hue}, 65%, 55%, 0.45)`;
+}
+
+const GENRE_COLORS: Record<string, string> = {
+  Action: 'rgba(239, 68, 68, 0.45)',
+  Adventure: 'rgba(249, 115, 22, 0.45)',
+  Comedy: 'rgba(250, 204, 21, 0.4)',
+  Drama: 'rgba(168, 85, 247, 0.45)',
+  Ecchi: 'rgba(244, 114, 182, 0.4)',
+  Fantasy: 'rgba(139, 92, 246, 0.45)',
+  Horror: 'rgba(127, 29, 29, 0.55)',
+  'Mahou Shoujo': 'rgba(236, 72, 153, 0.45)',
+  Mecha: 'rgba(100, 116, 139, 0.5)',
+  Music: 'rgba(34, 211, 238, 0.4)',
+  Mystery: 'rgba(99, 102, 241, 0.45)',
+  Psychological: 'rgba(109, 40, 217, 0.5)',
+  Romance: 'rgba(251, 113, 133, 0.45)',
+  'Sci-Fi': 'rgba(6, 182, 212, 0.45)',
+  'Slice of Life': 'rgba(74, 222, 128, 0.4)',
+  Sports: 'rgba(251, 146, 60, 0.45)',
+  Supernatural: 'rgba(167, 139, 250, 0.45)',
+  Thriller: 'rgba(220, 38, 38, 0.5)',
+};
+
 interface AnimeHeroProps {
   title: string;
   coverImage: string;
@@ -118,7 +148,11 @@ export function AnimeHero({
                 {genres.map((genre) => (
                   <span
                     key={genre}
-                    className="text-sm text-gray-300 cursor-pointer transition-colors hover:text-white"
+                    className="px-2.5 py-1 text-xs font-medium rounded-full backdrop-blur-sm transition-colors hover:brightness-110"
+                    style={{
+                      backgroundColor: GENRE_COLORS[genre] || genreColorFromName(genre),
+                      color: '#fff',
+                    }}
                   >
                     {genre}
                   </span>
@@ -128,8 +162,8 @@ export function AnimeHero({
 
             {/* Synopsis */}
             {synopsis && (
-              <p className="max-w-2xl mb-6 line-clamp-4 text-gray-200">
-                {synopsis}
+              <p className="max-w-2xl mb-6 max-h-28 overflow-y-auto text-gray-200 whitespace-pre-line pr-2">
+                {synopsis.replace(/<br\s*\/?>/gi, '\n')}
               </p>
             )}
 

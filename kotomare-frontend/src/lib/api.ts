@@ -34,7 +34,7 @@ async function fetchApi<T>(endpoint: string, options?: RequestInit): Promise<Api
   } catch (error) {
     return {
       data: null,
-      error: error instanceof Error ? error.message : 'Error de conexión',
+      error: error instanceof Error ? error.message : 'Error de conexion',
     };
   }
 }
@@ -135,6 +135,28 @@ export interface AniListFilters {
   years: number[];
 }
 
+export interface CharacterDetail {
+  id: number;
+  name: string;
+  name_native: string | null;
+  name_alternative: string[];
+  image: string | null;
+  description: string | null;
+  gender: string | null;
+  age: string | null;
+  blood_type: string | null;
+  date_of_birth: string | null;
+  favourites: number | null;
+  site_url: string | null;
+  media: Array<{
+    id: number;
+    title: string;
+    cover_image: string | null;
+    format: string | null;
+    role: string;
+  }>;
+}
+
 // ============== TIPOS DE SCRAPING ==============
 
 export interface StreamingSource {
@@ -165,27 +187,6 @@ export interface VideoServer {
   url: string;
   type: string;
   ads: number;
-}
-
-// ============== TIPOS DE BD LOCAL ==============
-
-export interface SavedAnime {
-  id: number;
-  anilist_id: number;
-  title: string;
-  slug: string;
-  cover_image: string | null;
-  streaming_sources: string[];
-  has_streaming: boolean;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface AnimeCheck {
-  exists: boolean;
-  has_streaming: boolean;
-  sources: string[];
-  anime?: SavedAnime;
 }
 
 // ============== API DE ANILIST (TIEMPO REAL) ==============
@@ -230,7 +231,7 @@ export const anilistApi = {
   },
 
   /**
-   * Obtiene animes en emisión
+   * Obtiene animes en emision
    */
   getAiring: async (page = 1, limit = 12) => {
     return fetchApi<{ animes: AniListAnime[]; count: number; page: number; source: string }>(
@@ -270,7 +271,7 @@ export const anilistApi = {
   },
 
   /**
-   * Navega el catálogo con filtros avanzados
+   * Navega el catalogo con filtros avanzados
    */
   browse: async (params: {
     q?: string;
@@ -319,7 +320,7 @@ export const anilistApi = {
   },
 
   /**
-   * Obtiene actores de voz filtrados por idioma con paginación
+   * Obtiene actores de voz filtrados por idioma con paginacion
    */
   getVoiceActors: async (anilistId: number, language = 'JAPANESE', page = 1, limit = 18) => {
     return fetchApi<{
@@ -341,7 +342,7 @@ export const anilistApi = {
   },
 
   /**
-   * Obtiene personajes con paginación (lazy loading)
+   * Obtiene personajes con paginacion (lazy loading)
    */
   getCharacters: async (anilistId: number, page = 1, limit = 16) => {
     return fetchApi<{
@@ -356,7 +357,7 @@ export const anilistApi = {
   },
 
   /**
-   * Obtiene staff con paginación (lazy loading)
+   * Obtiene staff con paginacion (lazy loading)
    */
   getStaff: async (anilistId: number, page = 1, limit = 18) => {
     return fetchApi<{
@@ -368,6 +369,15 @@ export const anilistApi = {
       anilist_id: number;
       source: string;
     }>(`/anilist/anime/${anilistId}/staff?page=${page}&limit=${limit}`);
+  },
+
+  /**
+   * Obtiene detalle de un personaje
+   */
+  getCharacter: async (characterId: number) => {
+    return fetchApi<{ character: CharacterDetail; source: string }>(
+      `/anilist/character/${characterId}`
+    );
   },
 };
 
@@ -391,7 +401,7 @@ export const scrapeApi = {
   },
 
   /**
-   * Obtiene detalle de un anime en AnimeFLV (sin guardar)
+   * Obtiene detalle de un anime en AnimeFLV
    */
   getAnimeFLVDetail: async (animeflvId: string) => {
     return fetchApi<{ anime: AnimeFLVSearchResult; source: string }>(
@@ -400,26 +410,7 @@ export const scrapeApi = {
   },
 
   /**
-   * Vincula un anime de AniList con AnimeFLV y guarda en BD
-   */
-  linkAnimeFLV: async (data: {
-    anilist_id: number;
-    title: string;
-    cover_image?: string;
-    animeflv_id: string;
-  }) => {
-    return fetchApi<{
-      message: string;
-      anime: SavedAnime & { episodes: Episode[]; episodes_count: number };
-      source: string;
-    }>('/scrape/animeflv/link', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    });
-  },
-
-  /**
-   * Obtiene episodios de AnimeFLV (sin guardar)
+   * Obtiene episodios de AnimeFLV
    */
   getAnimeFLVEpisodes: async (animeflvId: string) => {
     return fetchApi<{ episodes: Array<Episode & { url: string }>; count: number; source: string }>(
@@ -459,154 +450,9 @@ export const scrapeApi = {
   },
 };
 
-// ============== API DE ANIMES LOCALES (BD) ==============
-
-export const localApi = {
-  /**
-   * Obtiene animes guardados en la BD
-   */
-  getSavedAnimes: async (page = 1, perPage = 24, search?: string) => {
-    const params = new URLSearchParams();
-    params.set('page', String(page));
-    params.set('per_page', String(perPage));
-    if (search) params.set('search', search);
-
-    return fetchApi<{
-      animes: SavedAnime[];
-      count: number;
-      page: number;
-      total_pages: number;
-      total: number;
-      has_next: boolean;
-      has_prev: boolean;
-    }>(`/anime/saved?${params.toString()}`);
-  },
-
-  /**
-   * Verifica si un anime existe en la BD
-   */
-  checkAnime: async (anilistId: number) => {
-    return fetchApi<AnimeCheck>(`/anime/check/${anilistId}`);
-  },
-
-  /**
-   * Obtiene un anime de la BD por AniList ID
-   */
-  getAnime: async (anilistId: number) => {
-    return fetchApi<{ anime: SavedAnime; source: string }>(`/anime/${anilistId}`);
-  },
-
-  /**
-   * Obtiene las fuentes de streaming de un anime
-   */
-  getAnimeSources: async (anilistId: number) => {
-    return fetchApi<{
-      anime_id: number;
-      anilist_id: number;
-      sources: Array<{
-        name: string;
-        id: string;
-        url: string;
-        episodes_count: number;
-        linked_at: string;
-      }>;
-      count: number;
-    }>(`/anime/${anilistId}/sources`);
-  },
-
-  /**
-   * Obtiene episodios de una fuente específica
-   */
-  getAnimeEpisodes: async (anilistId: number, source: string) => {
-    return fetchApi<{
-      anime_id: number;
-      anilist_id: number;
-      source: string;
-      source_id: string;
-      episodes: Episode[];
-      episodes_count: number;
-    }>(`/anime/${anilistId}/episodes/${source}`);
-  },
-
-  /**
-   * Obtiene estadísticas de la BD
-   */
-  getStats: async () => {
-    return fetchApi<{
-      total_animes: number;
-      animes_with_streaming: number;
-      sources_breakdown: Record<string, number>;
-    }>('/anime/stats');
-  },
-};
-
-// ============== API DE ADMIN ==============
-
-export const adminApi = {
-  /**
-   * Obtiene estadísticas detalladas
-   */
-  getStats: async () => {
-    return fetchApi<{
-      total_animes: number;
-      total_episodes_indexed: number;
-      sources_breakdown: Record<string, number>;
-      storage: string;
-    }>('/admin/stats');
-  },
-
-  /**
-   * Lista todos los animes en la BD
-   */
-  listAnimes: async () => {
-    return fetchApi<{
-      animes: Array<{
-        id: number;
-        anilist_id: number;
-        title: string;
-        slug: string;
-        sources: string[];
-        created_at: string;
-        updated_at: string;
-      }>;
-      count: number;
-    }>('/admin/animes');
-  },
-
-  /**
-   * Elimina un anime de la BD
-   */
-  deleteAnime: async (anilistId: number) => {
-    return fetchApi<{ success: boolean; message: string; anilist_id: number }>(
-      `/admin/anime/anilist/${anilistId}`,
-      { method: 'DELETE' }
-    );
-  },
-
-  /**
-   * Elimina una fuente de streaming de un anime
-   */
-  removeSource: async (anilistId: number, sourceName: string) => {
-    return fetchApi<{ success: boolean; message: string; remaining_sources: string[] }>(
-      `/admin/anime/${anilistId}/source/${sourceName}`,
-      { method: 'DELETE' }
-    );
-  },
-
-  /**
-   * Limpia toda la BD (requiere confirmación)
-   */
-  clearDb: async () => {
-    return fetchApi<{ success: boolean; message: string }>(
-      '/admin/clear-db?confirm=true',
-      { method: 'POST' }
-    );
-  },
-};
-
 // ============== EXPORTACIONES LEGACY (compatibilidad) ==============
 
-// Mantenemos estas exportaciones para compatibilidad con código existente
+// Mantenemos estas exportaciones para compatibilidad con codigo existente
 export const animeApi = {
   // Redirigir a anilistApi
   getFeaturedAnimes: anilistApi.getTrending,

@@ -53,25 +53,31 @@ export function Modal({ isOpen, onClose, children, title, size = 'md' }: ModalPr
           border: '1px solid var(--border)',
         }}
       >
+        <button
+          onClick={onClose}
+          className="absolute top-3 right-3 p-1.5 rounded-lg transition-colors z-10 cursor-pointer"
+          style={{ color: 'var(--foreground-secondary)', backgroundColor: 'var(--background-secondary)' }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.color = 'var(--foreground)';
+            e.currentTarget.style.backgroundColor = 'var(--background-tertiary)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.color = 'var(--foreground-secondary)';
+            e.currentTarget.style.backgroundColor = 'var(--background-secondary)';
+          }}
+        >
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
         {title && (
           <div
-            className="flex items-center justify-between p-4"
+            className="pr-10 p-4"
             style={{ borderBottom: '1px solid var(--border)' }}
           >
             <h2 className="text-lg font-semibold" style={{ color: 'var(--foreground)' }}>
               {title}
             </h2>
-            <button
-              onClick={onClose}
-              className="p-1 transition-colors"
-              style={{ color: 'var(--foreground-secondary)' }}
-              onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--foreground)')}
-              onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--foreground-secondary)')}
-            >
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
           </div>
         )}
         <div className="p-4">{children}</div>
